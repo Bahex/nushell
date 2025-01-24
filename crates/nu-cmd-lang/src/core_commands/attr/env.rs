@@ -9,11 +9,13 @@ impl Command for AttrEnv {
     }
 
     fn signature(&self) -> Signature {
-        Signature::build("attr env").category(Category::Core)
+        Signature::build("attr env")
+            .input_output_type(Type::Nothing, Type::Nothing)
+            .category(Category::Core)
     }
 
     fn description(&self) -> &str {
-        "Attribute for making custom commands keep environment defined inside the command"
+        "Attribute for making custom commands keep environment defined inside the command."
     }
 
     fn run(

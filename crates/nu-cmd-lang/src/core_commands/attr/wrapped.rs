@@ -9,11 +9,13 @@ impl Command for AttrWrapped {
     }
 
     fn signature(&self) -> Signature {
-        Signature::build("attr wrapped").category(Category::Core)
+        Signature::build("attr wrapped")
+            .input_output_type(Type::Nothing, Type::Nothing)
+            .category(Category::Core)
     }
 
     fn description(&self) -> &str {
-        "Attribute for making custom commands treat unknown flags and arguments as strings"
+        "Attribute for making custom commands treat unknown flags and arguments as strings."
     }
 
     fn run(
