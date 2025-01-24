@@ -197,8 +197,7 @@ impl Pipeline {
         Self {
             elements: expressions
                 .into_iter()
-                .enumerate()
-                .map(|(idx, expr)| PipelineElement {
+                .map(|expr| PipelineElement {
                     pipe: None,
                     expr,
                     redirection: None,

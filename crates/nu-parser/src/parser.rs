@@ -1268,7 +1268,7 @@ pub fn parse_call(working_set: &mut StateWorkingSet, spans: &[Span], head: Span)
         return garbage(working_set, head);
     }
 
-    let (cmd_start, pos, name, maybe_decl_id) = find_longest_decl(working_set, spans, b"");
+    let (cmd_start, pos, _name, maybe_decl_id) = find_longest_decl(working_set, spans, b"");
 
     if let Some(decl_id) = maybe_decl_id {
         // Before the internal parsing we check if there is no let or alias declarations

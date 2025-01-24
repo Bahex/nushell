@@ -394,7 +394,7 @@ pub fn parse_def(
         let name = name.strip_prefix("attr ").unwrap_or(&name);
         let value = match eval_constant(working_set, &expr) {
             Ok(val) => val,
-            Err(e) => {
+            Err(_) => {
                 attribute_exprs.push(garbage(working_set, Span::concat(&lite_command.parts)));
                 continue;
             }
