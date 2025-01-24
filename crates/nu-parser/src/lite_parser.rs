@@ -402,6 +402,8 @@ pub fn lite_parse(
                 }
                 TokenContents::Eol => {
                     if command_is_attribute(&command, working_set) {
+                        // Get rid of the `@`
+                        command.parts[0].start += 1;
                         curr_comment
                             .get_or_insert(Vec::new())
                             .append(&mut command.comments);
