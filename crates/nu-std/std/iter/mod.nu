@@ -14,21 +14,10 @@
 # > The closure also has to be valid for the types it receives
 # > These will be flagged as errors later as closure annotations
 # > are implemented
-#
-# # Example
-# ```
-# use std ["assert equal" "iter find"]
-#
-# let haystack = ["shell", "abc", "around", "nushell", "std"] 
-#
-# let found = ($haystack | iter find {|e| $e starts-with "a" })
-# let not_found = ($haystack | iter find {|e| $e mod 2 == 0})
-# 
-# assert equal $found "abc"
-# assert equal $not_found null
-# ```
-export def find [ # -> any | null  
-    fn: closure          # the closure used to perform the search 
+@example "Find an element starting with 'a'" r#'["shell", "abc", "around", "nushell", "std"] | iter find {|e| $e starts-with "a" }'# --result "abc"
+@example "Find an element starting with 'a'" r#'["shell", "abc", "around", "nushell", "std"] | iter find {|e| $e mod 2 == 0}'# --result null
+export def find [
+    fn: closure # the closure used to perform the search 
 ] {
     filter {|e| try {do $fn $e} } | try { first }
 }
@@ -38,23 +27,10 @@ export def find [ # -> any | null
 #
 # # Invariant
 # > The closure has to return a bool
-#
-# # Example
-# ```nu
-# use std ["assert equal" "iter find-index"]
-#
-# let res = (
-#     ["iter", "abc", "shell", "around", "nushell", "std"]
-#     | iter find-index {|x| $x starts-with 's'}
-# )
-# assert equal $res 2
-#
-# let is_even = {|x| $x mod 2 == 0}
-# let res = ([3 5 13 91] | iter find-index $is_even)
-# assert equal $res -1
-# ```
-export def find-index [ # -> int
-    fn: closure                # the closure used to perform the search
+@example "" r#'["iter", "abc", "shell", "around", "nushell", "std"] | iter find-index {|x| $x starts-with 's'}'# --result 2
+@example "" r#'[3 5 13 91] | iter find-index {|x| $x mod 2 == 0}'# --result -1
+export def find-index [
+    fn: closure # the closure used to perform the search
 ] {
     enumerate
     | find {|e| $e.item | do $fn $e.item }
@@ -63,16 +39,9 @@ export def find-index [ # -> int
 
 # Returns a new list with the separator between adjacent
 # items of the original list
-#
-# # Example
-# ```
-# use std ["assert equal" "iter intersperse"]
-#
-# let res = ([1 2 3 4] | iter intersperse 0)
-# assert equal $res [1 0 2 0 3 0 4]
-# ```
-export def intersperse [ # -> list<any>
-    separator: any              # the separator to be used
+@example "" r#'[1 2 3 4] | iter intersperse 0'# --result [1 0 2 0 3 0 4]
+export def intersperse [
+    separator: any # the separator to be used
 ] {
     reduce --fold [] {|e, acc|
          $acc ++ [$e, $separator]
@@ -89,20 +58,8 @@ export def intersperse [ # -> list<any>
 # being the list element in the current iteration and the second
 # the internal state.
 # The internal state is also provided as pipeline input.
-#
-# # Example
-# ```
-# use std ["assert equal" "iter scan"]
-# let scanned = ([1 2 3] | iter scan 0 {|x, y| $x + $y})
-#
-# assert equal $scanned [0, 1, 3, 6]
-#
-# # use the --noinit(-n) flag to remove the initial value from
-# # the final result
-# let scanned = ([1 2 3] | iter scan 0 {|x, y| $x + $y} -n)
-#
-# assert equal $scanned [1, 3, 6]
-# ```
+@example "" r#'[1 2 3] | iter scan 0 {|x, y| $x + $y}'# --result [0, 1, 3, 6]
+@example "use the `--noinit(-n)` flag to remove the initial value from the final result" r#'[1 2 3] | iter scan 0 {|x, y| $x + $y} -n'# --result [1, 3, 6]
 export def scan [ # -> list<any>
     init: any            # initial value to seed the initial state
     fn: closure          # the closure to perform the scan
@@ -118,16 +75,8 @@ export def scan [ # -> list<any>
 # Returns a list of values for which the supplied closure does not
 # return `null` or an error. It is equivalent to 
 #     `$in | each $fn | filter $fn`
-#
-# # Example
-# ```nu
-# use std ["assert equal" "iter filter-map"]
-#
-# let res = ([2 5 "4" 7] | iter filter-map {|e| $e ** 2})
-#
-# assert equal $res [4 25 49]
-# ```
-export def filter-map [ # -> list<any>
+@example "" r#'[2 5 "4" 7] | iter filter-map {|e| $e ** 2}'# --result [4, 25, 49]
+export def filter-map [
     fn: closure                # the closure to apply to the input
 ] {
     each {|$e|
@@ -143,16 +92,7 @@ export def filter-map [ # -> list<any>
 }
 
 # Maps a closure to each nested structure and flattens the result
-#
-# # Example
-# ```nu
-# use std ["assert equal" "iter flat-map"]
-#
-# let res = (
-#     [[1 2 3] [2 3 4] [5 6 7]] | iter flat-map {|e| $e | math sum}
-# )
-# assert equal $res [6 9 18]
-# ```
+@example "" r#'[[1 2 3] [2 3 4] [5 6 7]] | iter flat-map {|e| $e | math sum}'# --result [6, 9, 18]
 export def flat-map [ # -> list<any>
     fn: closure              # the closure to map to the nested structures
 ] {
@@ -160,18 +100,8 @@ export def flat-map [ # -> list<any>
 }
 
 # Zips two structures and applies a closure to each of the zips
-#
-# # Example
-# ```nu
-# use std ["assert equal" "iter iter zip-with"]
-#
-# let res = (
-#     [1 2 3] | iter zip-with [2 3 4] {|a, b| $a + $b }
-# )
-#
-# assert equal $res [3 5 7]
-# ```
-export def zip-with [ # -> list<any>
+@example "" r#'[1 2 3] | iter zip-with [2 3 4] {|a, b| $a + $b }'# --result [3, 5, 7]
+export def  zip-with [ # -> list<any>
     other: any               # the structure to zip with
     fn: closure              # the closure to apply to the zips
 ] {
@@ -182,20 +112,7 @@ export def zip-with [ # -> list<any>
 }
 
 # Zips two lists and returns a record with the first list as headers
-#
-# # Example
-# ```nu
-# use std ["assert equal" "iter iter zip-into-record"]
-#
-# let res = (
-#     [1 2 3] | iter zip-into-record [2 3 4]
-# )
-#
-# assert equal $res [
-#     [1 2 3];
-#     [2 3 4]
-# ]
-# ```
+@example "" r#'[1 2 3] | iter zip-into-record [2 3 4]'# --result [{1: 2, 2: 3, 3: 4}]
 export def zip-into-record [ # -> table<any>
     other: list                     # the values to zip with
 ] {

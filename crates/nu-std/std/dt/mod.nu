@@ -89,23 +89,21 @@ def borrow-second [from: record, current: record] {
 }
 
 # Subtract later from earlier datetime and return the unit differences as a record
-# Example:
-# > dt datetime-diff 2023-05-07T04:08:45+12:00 2019-05-10T09:59:12-07:00
-# ╭─────────────┬────╮
-# │ year        │ 3  │
-# │ month       │ 11 │
-# │ day         │ 26 │
-# │ hour        │ 23 │
-# │ minute      │ 9  │
-# │ second      │ 33 │
-# │ millisecond │ 0  │
-# │ microsecond │ 0  │
-# │ nanosecond  │ 0  │
-# ╰─────────────┴────╯
+@example "" r#'dt datetime-diff 2023-05-07T04:08:45+12:00 2019-05-10T09:59:12-07:00'# --result {
+    year: 3,
+    month: 11,
+    day: 26,
+    hour: 23,
+    minute: 9,
+    second: 33,
+    millisecond: 0,
+    microsecond: 0,
+    nanosecond: 0,
+}
 export def datetime-diff [
-        later: datetime, # a later datetime
-        earlier: datetime  # earlier (starting) datetime
-    ] {
+    later: datetime, # a later datetime
+    earlier: datetime  # earlier (starting) datetime
+]: [nothing -> record] {
     if $earlier > $later {
         let start = (metadata $later).span.start
         let end = (metadata $earlier).span.end
@@ -162,10 +160,8 @@ export def datetime-diff [
 }
 
 # Convert record from datetime-diff into humanized string
-# Example:
-# > dt pretty-print-duration (dt datetime-diff 2023-05-07T04:08:45+12:00 2019-05-10T09:59:12+12:00)
-# 3yrs 11months 27days 18hrs 9mins 33secs
-export def pretty-print-duration [dur: record] {
+@example "" r#'dt pretty-print-duration (dt datetime-diff 2023-05-07T04:08:45+12:00 2019-05-10T09:59:12+12:00)'# --result "3yrs 11months 27days 18hrs 9mins 33secs"
+export def pretty-print-duration [dur: record]: [nothing -> string] {
     mut result = ""
     if $dur.year != 0 {
         if $dur.year > 1 {
