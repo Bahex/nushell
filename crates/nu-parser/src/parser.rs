@@ -1268,7 +1268,7 @@ pub fn parse_call(working_set: &mut StateWorkingSet, spans: &[Span], head: Span)
         return garbage(working_set, head);
     }
 
-    let (cmd_start, pos, maybe_decl_id) = find_longest_decl(working_set, spans, b"");
+    let (cmd_start, pos, name, maybe_decl_id) = find_longest_decl(working_set, spans, b"");
 
     if let Some(decl_id) = maybe_decl_id {
         // Before the internal parsing we check if there is no let or alias declarations
@@ -1372,6 +1372,7 @@ fn find_longest_decl(
 ) -> (
     usize,
     usize,
+    Vec<u8>,
     Option<nu_protocol::Id<nu_protocol::marker::Decl>>,
 ) {
     let mut pos = 0;
@@ -1408,7 +1409,7 @@ fn find_longest_decl(
         name_spans.pop();
         pos -= 1;
 
-        let mut name = vec![];
+        name = vec![];
         name.extend(prefix);
         for name_span in &name_spans {
             let name_part = working_set.get_span_contents(*name_span);
@@ -1421,7 +1422,59 @@ fn find_longest_decl(
         }
         maybe_decl_id = working_set.find_decl(&name);
     }
-    (cmd_start, pos, maybe_decl_id)
+    (cmd_start, pos, name, maybe_decl_id)
+}
+
+pub fn parse_attribute(
+    working_set: &mut StateWorkingSet,
+    lite_command: &LiteCommand,
+) -> Result<(String, Expression), Expression> {
+    let spans = &lite_command.parts;
+
+    let (cmd_start, cmd_end, name, decl_id) = find_longest_decl(working_set, spans, b"attr");
+    let name = String::from_utf8(name).expect("Command name should have been utf8");
+
+    if let Some(decl_id) = decl_id {
+        let decl = working_set.get_decl(decl_id);
+
+        let parsed_call = if let Some(alias) = decl.as_alias() {
+            if let Expression {
+                expr: Expr::ExternalCall(..),
+                ..
+            } = &alias.clone().wrapped_call
+            {
+                return Err(garbage(working_set, Span::concat(spans)));
+            } else {
+                trace!("parsing: alias of internal call");
+                parse_internal_call(
+                    working_set,
+                    Span::concat(&spans[cmd_start..cmd_end]),
+                    &spans[cmd_end..],
+                    decl_id,
+                )
+            }
+        } else {
+            trace!("parsing: internal call");
+            parse_internal_call(
+                working_set,
+                Span::concat(&spans[cmd_start..cmd_end]),
+                &spans[cmd_end..],
+                decl_id,
+            )
+        };
+
+        Ok((
+            name,
+            Expression::new(
+                working_set,
+                Expr::Call(parsed_call.call),
+                Span::concat(spans),
+                parsed_call.output,
+            ),
+        ))
+    } else {
+        Err(garbage(working_set, Span::concat(spans)))
+    }
 }
 
 pub fn parse_binary(working_set: &mut StateWorkingSet, span: Span) -> Expression {

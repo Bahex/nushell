@@ -1,7 +1,7 @@
 use crate::{
     exportable::Exportable,
     parse_block,
-    parser::{parse_redirection, redirecting_builtin_error},
+    parser::{parse_attribute, parse_redirection, redirecting_builtin_error},
     type_check::{check_block_input_output, type_compatible},
 };
 use itertools::Itertools;
@@ -373,6 +373,25 @@ pub fn parse_def(
 
     let (desc, extra_desc) = working_set.build_desc(&lite_command.comments);
 
+    // TODO: Add sensible errors for theses
+    let mut attributes = vec![];
+    for lite_command in &lite_command.attributes {
+        let (name, expr) = match parse_attribute(working_set, lite_command) {
+            Ok(val) => val,
+            Err(e) => {
+                return (garbage_pipeline(working_set, spans), None);
+            }
+        };
+        let name = name.strip_prefix("attr ").unwrap_or(&name);
+        let value = match eval_constant(working_set, &expr) {
+            Ok(val) => val,
+            Err(e) => {
+                return (garbage_pipeline(working_set, spans), None);
+            }
+        };
+        attributes.push((name.to_string(), value));
+    }
+
     // Checking that the function is used with the correct name
     // Maybe this is not necessary but it is a sanity check
     // Note: "export def" is treated the same as "def"
@@ -603,7 +622,7 @@ pub fn parse_def(
             signature.extra_description = extra_desc;
             signature.allows_unknown_args = has_wrapped;
 
-            *declaration = signature.clone().into_block_command(block_id);
+            *declaration = signature.clone().into_block_command(block_id, attributes);
 
             let block = working_set.get_block_mut(block_id);
             block.signature = signature;
@@ -770,7 +789,7 @@ pub fn parse_extern(
                             name_expr.span,
                         ));
                     } else {
-                        *declaration = signature.clone().into_block_command(block_id);
+                        *declaration = signature.clone().into_block_command(block_id, vec![]);
 
                         working_set.get_block_mut(block_id).signature = signature;
                     }
