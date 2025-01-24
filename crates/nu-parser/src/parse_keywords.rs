@@ -512,12 +512,18 @@ pub fn parse_def(
         }
     };
 
-    let Ok(has_env) = has_flag_const(working_set, &call, "env") else {
+    let Ok(has_env_flag) = has_flag_const(working_set, &call, "env") else {
         return (garbage_pipeline(working_set, spans), None);
     };
-    let Ok(has_wrapped) = has_flag_const(working_set, &call, "wrapped") else {
+    let Ok(has_wrapped_flag) = has_flag_const(working_set, &call, "wrapped") else {
         return (garbage_pipeline(working_set, spans), None);
     };
+
+    let has_env_attribute = attributes.iter().any(|(attr, _)| attr == "env");
+    let has_wrapped_attribute = attributes.iter().any(|(attr, _)| attr == "wrapped");
+
+    let has_env = has_env_flag || has_env_attribute;
+    let has_wrapped = has_wrapped_flag || has_wrapped_attribute;
 
     // All positional arguments must be in the call positional vector by this point
     let name_expr = call.positional_nth(0).expect("def call already checked");
