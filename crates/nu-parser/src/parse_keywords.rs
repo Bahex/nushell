@@ -1269,6 +1269,7 @@ pub fn parse_export_in_module(
             b"def" => {
                 let lite_command = LiteCommand {
                     comments: lite_command.comments.clone(),
+                    attributes: lite_command.attributes.clone(),
                     parts: spans[1..].to_vec(),
                     pipe: lite_command.pipe,
                     redirection: lite_command.redirection.clone(),
@@ -1313,6 +1314,7 @@ pub fn parse_export_in_module(
             b"extern" => {
                 let lite_command = LiteCommand {
                     comments: lite_command.comments.clone(),
+                    attributes: lite_command.attributes.clone(),
                     parts: spans[1..].to_vec(),
                     pipe: lite_command.pipe,
                     redirection: lite_command.redirection.clone(),
@@ -1369,6 +1371,7 @@ pub fn parse_export_in_module(
             b"alias" => {
                 let lite_command = LiteCommand {
                     comments: lite_command.comments.clone(),
+                    attributes: vec![],
                     parts: spans[1..].to_vec(),
                     pipe: lite_command.pipe,
                     redirection: lite_command.redirection.clone(),
@@ -1426,6 +1429,7 @@ pub fn parse_export_in_module(
             b"use" => {
                 let lite_command = LiteCommand {
                     comments: lite_command.comments.clone(),
+                    attributes: vec![],
                     parts: spans[1..].to_vec(),
                     pipe: lite_command.pipe,
                     redirection: lite_command.redirection.clone(),
@@ -1728,7 +1732,7 @@ pub fn parse_module_block(
 
     let module_comments = collect_first_comments(&output);
 
-    let (output, err) = lite_parse(&output);
+    let (output, err) = lite_parse(&output, working_set);
     if let Some(err) = err {
         working_set.error(err)
     }

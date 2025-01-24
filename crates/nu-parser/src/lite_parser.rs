@@ -3,7 +3,7 @@
 
 use crate::{Token, TokenContents};
 use itertools::{Either, Itertools};
-use nu_protocol::{ast::RedirectionSource, ParseError, Span};
+use nu_protocol::{ast::RedirectionSource, engine::StateWorkingSet, ParseError, Span};
 use std::mem;
 
 #[derive(Debug, Clone, Copy)]
@@ -62,6 +62,7 @@ impl LiteRedirection {
 #[derive(Debug, Clone, Default)]
 pub struct LiteCommand {
     pub pipe: Option<Span>,
+    pub attributes: Vec<LiteCommand>,
     pub comments: Vec<Span>,
     pub parts: Vec<Span>,
     pub redirection: Option<LiteRedirection>,
@@ -188,7 +189,17 @@ fn last_non_comment_token(tokens: &[Token], cur_idx: usize) -> Option<TokenConte
     None
 }
 
-pub fn lite_parse(tokens: &[Token]) -> (LiteBlock, Option<ParseError>) {
+fn command_is_attribute(command: &LiteCommand, working_set: &StateWorkingSet) -> bool {
+    let Some(cmd) = command.parts.first() else {
+        return false;
+    };
+    working_set.get_span_contents(*cmd).starts_with(b"@")
+}
+
+pub fn lite_parse(
+    tokens: &[Token],
+    working_set: &StateWorkingSet,
+) -> (LiteBlock, Option<ParseError>) {
     if tokens.is_empty() {
         return (LiteBlock::default(), None);
     }
@@ -196,6 +207,8 @@ pub fn lite_parse(tokens: &[Token]) -> (LiteBlock, Option<ParseError>) {
     let mut block = LiteBlock::default();
     let mut pipeline = LitePipeline::default();
     let mut command = LiteCommand::default();
+
+    let mut curr_attr: Option<Vec<LiteCommand>> = None;
 
     let mut last_token = TokenContents::Eol;
     let mut file_redirection = None;
@@ -320,6 +333,10 @@ pub fn lite_parse(tokens: &[Token]) -> (LiteBlock, Option<ParseError>) {
                     if let Some(curr_comment) = curr_comment.take() {
                         command.comments = curr_comment;
                     }
+                    // If we have attributes, go ahead and attach them
+                    if let Some(curr_attr) = curr_attr.take() {
+                        command.attributes = curr_attr;
+                    }
                     command.push(token.span);
                 }
                 TokenContents::AssignmentOperator => {
@@ -384,19 +401,34 @@ pub fn lite_parse(tokens: &[Token]) -> (LiteBlock, Option<ParseError>) {
                     command.pipe = Some(token.span);
                 }
                 TokenContents::Eol => {
-                    // Handle `[Command] [Pipe] ([Comment] | [Eol])+ [Command]`
-                    //
-                    // `[Eol]` branch checks if previous token is `[Pipe]` to construct pipeline
-                    // and so `[Comment] | [Eol]` should be ignore to make it work
-                    let actual_token = last_non_comment_token(tokens, idx);
-                    if actual_token != Some(TokenContents::Pipe) {
-                        pipeline.push(&mut command);
-                        block.push(&mut pipeline);
-                    }
+                    if command_is_attribute(&command, working_set) {
+                        curr_comment
+                            .get_or_insert(Vec::new())
+                            .append(&mut command.comments);
+                        curr_attr
+                            .get_or_insert(Vec::new())
+                            .append(&mut command.attributes);
+                        curr_attr
+                            .get_or_insert(Vec::new())
+                            .push(mem::take(&mut command));
+                    } else {
+                        if let Some(curr_attr) = curr_attr.take() {
+                            command.attributes = curr_attr;
+                        }
+                        // Handle `[Command] [Pipe] ([Comment] | [Eol])+ [Command]`
+                        //
+                        // `[Eol]` branch checks if previous token is `[Pipe]` to construct pipeline
+                        // and so `[Comment] | [Eol]` should be ignore to make it work
+                        let actual_token = last_non_comment_token(tokens, idx);
+                        if actual_token != Some(TokenContents::Pipe) {
+                            pipeline.push(&mut command);
+                            block.push(&mut pipeline);
+                        }
 
-                    if last_token == TokenContents::Eol {
-                        // Clear out the comment as we're entering a new comment
-                        curr_comment = None;
+                        if last_token == TokenContents::Eol {
+                            // Clear out the comment as we're entering a new comment
+                            curr_comment = None;
+                        }
                     }
                 }
                 TokenContents::Semicolon => {
