@@ -374,8 +374,11 @@ pub fn parse_def(
     let (desc, extra_desc) = working_set.build_desc(&lite_command.comments);
 
     // TODO: Add sensible errors for theses
-    let mut attributes = vec![];
     let mut attribute_exprs = vec![];
+    let mut attributes = vec![];
+    // let mut examples = vec![];
+    let mut has_env_attribute = false;
+    let mut has_wrapped_attribute = false;
 
     for lite_command in &lite_command.attributes {
         let (name, expr) = match parse_attribute(working_set, lite_command) {
@@ -397,7 +400,18 @@ pub fn parse_def(
             }
         };
         attribute_exprs.push(expr);
-        attributes.push((name.to_string(), value));
+        match name {
+            "env" => {
+                has_env_attribute = true;
+            }
+            "wrapped" => {
+                has_wrapped_attribute = true;
+            }
+            "example" => {}
+            _ => {
+                attributes.push((name.to_string(), value));
+            }
+        }
     }
 
     // Checking that the function is used with the correct name
@@ -524,9 +538,6 @@ pub fn parse_def(
     let Ok(has_wrapped_flag) = has_flag_const(working_set, &call, "wrapped") else {
         return (garbage_pipeline(working_set, spans), None);
     };
-
-    let has_env_attribute = attributes.iter().any(|(attr, _)| attr == "env");
-    let has_wrapped_attribute = attributes.iter().any(|(attr, _)| attr == "wrapped");
 
     let has_env = has_env_flag || has_env_attribute;
     let has_wrapped = has_wrapped_flag || has_wrapped_attribute;
