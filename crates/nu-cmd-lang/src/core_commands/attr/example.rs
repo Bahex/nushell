@@ -10,7 +10,16 @@ impl Command for AttrExample {
 
     fn signature(&self) -> Signature {
         Signature::build("attr example")
-            .input_output_types(vec![(Type::Nothing, Type::Nothing)])
+            .input_output_types(vec![(
+                Type::Nothing,
+                Type::Record(
+                    [
+                        ("description".into(), Type::String),
+                        ("example".into(), Type::String),
+                    ]
+                    .into(),
+                ),
+            )])
             .allow_variants_without_examples(true)
             .required(
                 "description",
