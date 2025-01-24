@@ -15,8 +15,8 @@ use nu_protocol::{
     engine::{StateWorkingSet, DEFAULT_OVERLAY_NAME},
     eval_const::eval_constant,
     parser_path::ParserPath,
-    Alias, BlockId, DeclId, Module, ModuleId, ParseError, PositionalArg, ResolvedImportPattern,
-    Span, Spanned, SyntaxShape, Type, Value, VarId,
+    Alias, BlockId, CustomExample, DeclId, FromValue, Module, ModuleId, ParseError, PositionalArg,
+    ResolvedImportPattern, Span, Spanned, SyntaxShape, Type, Value, VarId,
 };
 use std::{
     collections::{HashMap, HashSet},
@@ -376,7 +376,7 @@ pub fn parse_def(
     // TODO: Add sensible errors for theses
     let mut attribute_exprs = vec![];
     let mut attributes = vec![];
-    // let mut examples = vec![];
+    let mut examples = vec![];
     let mut has_env_attribute = false;
     let mut has_wrapped_attribute = false;
 
@@ -407,7 +407,12 @@ pub fn parse_def(
             "wrapped" => {
                 has_wrapped_attribute = true;
             }
-            "example" => {}
+            "example" => {
+                examples.push(
+                    CustomExample::from_value(value)
+                        .expect("`attr examples` should have validated this"),
+                );
+            }
             _ => {
                 attributes.push((name.to_string(), value));
             }
@@ -639,7 +644,9 @@ pub fn parse_def(
             signature.extra_description = extra_desc;
             signature.allows_unknown_args = has_wrapped;
 
-            *declaration = signature.clone().into_block_command(block_id, attributes);
+            *declaration = signature
+                .clone()
+                .into_block_command(block_id, attributes, examples);
 
             let block = working_set.get_block_mut(block_id);
             block.signature = signature;
@@ -804,7 +811,10 @@ pub fn parse_extern(
                             name_expr.span,
                         ));
                     } else {
-                        *declaration = signature.clone().into_block_command(block_id, vec![]);
+                        *declaration =
+                            signature
+                                .clone()
+                                .into_block_command(block_id, vec![], vec![]);
 
                         working_set.get_block_mut(block_id).signature = signature;
                     }
