@@ -15,7 +15,7 @@
 # > These will be flagged as errors later as closure annotations
 # > are implemented
 @example "Find an element starting with 'a'" r#'["shell", "abc", "around", "nushell", "std"] | iter find {|e| $e starts-with "a" }'# --result "abc"
-@example "Find an element starting with 'a'" r#'["shell", "abc", "around", "nushell", "std"] | iter find {|e| $e mod 2 == 0}'# --result null
+@example "Try to find an element starting with 'a'" r#'["shell", "abc", "around", "nushell", "std"] | iter find {|e| $e mod 2 == 0}'# --result null
 export def find [
     fn: closure # the closure used to perform the search 
 ] {
@@ -27,8 +27,8 @@ export def find [
 #
 # # Invariant
 # > The closure has to return a bool
-@example "" r#'["iter", "abc", "shell", "around", "nushell", "std"] | iter find-index {|x| $x starts-with 's'}'# --result 2
-@example "" r#'[3 5 13 91] | iter find-index {|x| $x mod 2 == 0}'# --result -1
+@example "Find the index of an element starting with 's'" r#'["iter", "abc", "shell", "around", "nushell", "std"] | iter find-index {|x| $x starts-with 's'}'# --result 2
+@example "Try to find the index of an element starting with 's'" r#'[3 5 13 91] | iter find-index {|x| $x mod 2 == 0}'# --result -1
 export def find-index [
     fn: closure # the closure used to perform the search
 ] {
@@ -39,7 +39,7 @@ export def find-index [
 
 # Returns a new list with the separator between adjacent
 # items of the original list
-@example "" r#'[1 2 3 4] | iter intersperse 0'# --result [1 0 2 0 3 0 4]
+@example "Intersperse the list with `0`" r#'[1 2 3 4] | iter intersperse 0'# --result [1 0 2 0 3 0 4]
 export def intersperse [
     separator: any # the separator to be used
 ] {
@@ -58,7 +58,7 @@ export def intersperse [
 # being the list element in the current iteration and the second
 # the internal state.
 # The internal state is also provided as pipeline input.
-@example "" r#'[1 2 3] | iter scan 0 {|x, y| $x + $y}'# --result [0, 1, 3, 6]
+@example "Get a running sum of the input list" r#'[1 2 3] | iter scan 0 {|x, y| $x + $y}'# --result [0, 1, 3, 6]
 @example "use the `--noinit(-n)` flag to remove the initial value from the final result" r#'[1 2 3] | iter scan 0 {|x, y| $x + $y} -n'# --result [1, 3, 6]
 export def scan [ # -> list<any>
     init: any            # initial value to seed the initial state
@@ -75,7 +75,7 @@ export def scan [ # -> list<any>
 # Returns a list of values for which the supplied closure does not
 # return `null` or an error. It is equivalent to 
 #     `$in | each $fn | filter $fn`
-@example "" r#'[2 5 "4" 7] | iter filter-map {|e| $e ** 2}'# --result [4, 25, 49]
+@example "Get the squares of elements that can be squared" r#'[2 5 "4" 7] | iter filter-map {|e| $e ** 2}'# --result [4, 25, 49]
 export def filter-map [
     fn: closure                # the closure to apply to the input
 ] {
@@ -92,7 +92,7 @@ export def filter-map [
 }
 
 # Maps a closure to each nested structure and flattens the result
-@example "" r#'[[1 2 3] [2 3 4] [5 6 7]] | iter flat-map {|e| $e | math sum}'# --result [6, 9, 18]
+@example "Get the sums of list elements" r#'[[1 2 3] [2 3 4] [5 6 7]] | iter flat-map {|e| $e | math sum}'# --result [6, 9, 18]
 export def flat-map [ # -> list<any>
     fn: closure              # the closure to map to the nested structures
 ] {
@@ -100,7 +100,7 @@ export def flat-map [ # -> list<any>
 }
 
 # Zips two structures and applies a closure to each of the zips
-@example "" r#'[1 2 3] | iter zip-with [2 3 4] {|a, b| $a + $b }'# --result [3, 5, 7]
+@example "Add two lists element-wise" r#'[1 2 3] | iter zip-with [2 3 4] {|a, b| $a + $b }'# --result [3, 5, 7]
 export def  zip-with [ # -> list<any>
     other: any               # the structure to zip with
     fn: closure              # the closure to apply to the zips

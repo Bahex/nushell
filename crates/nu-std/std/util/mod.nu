@@ -1,10 +1,12 @@
 # Add the given paths to the PATH.
-@example "adding some dummy paths to an empty PATH" r#'with-env { PATH: [] } {
+@example "adding some dummy paths to an empty PATH" (
+    r#'with-env { PATH: [] } {
         path add "foo"
         path add "bar" "baz"
         path add "fooo" --append
         path add "returned" --ret
-    }'# --result [returned bar baz foo fooo]
+    }'#
+) --result [returned bar baz foo fooo]
 @example "adding paths based on the operating system" r#'path add {linux: "foo", windows: "bar", darwin: "baz"}'#
 export def --env "path add" [
     --ret (-r)  # return $env.PATH, useful in pipelines to avoid scoping.
