@@ -46,3 +46,14 @@ export def pwd [
         $env.PWD
     }
 }
+
+# Mark command as a test
+export alias "attr test" = echo
+# Mark a test command as part of a test suite
+export alias "attr test suite" = echo
+# Mark a test command to be ignored
+export alias "attr ignore" = echo
+# Mark a command as a benchmark
+export alias "attr bench" = echo
+# Mark a command as deprecated
+export alias "attr deprecated" = echo
