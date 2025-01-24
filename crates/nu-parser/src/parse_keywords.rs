@@ -400,7 +400,19 @@ pub fn parse_def(
                 continue;
             }
         };
+        let span_end = expr.span.end;
         attribute_exprs.push(expr);
+        // HACK: This lets attributes bypass return value type checking by inserting and invisible
+        // Nothing
+        attribute_exprs.push(Expression::new(
+            working_set,
+            Expr::Nothing,
+            Span {
+                start: span_end,
+                end: span_end,
+            },
+            Type::Nothing,
+        ));
         match name {
             "env" => {
                 has_env_attribute = true;
