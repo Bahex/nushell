@@ -18,6 +18,7 @@ pub fn create_default_context() -> EngineState {
             Alias,
             AttrEnv,
             AttrExample,
+            AttrSearchTerms,
             AttrWrapped,
             Break,
             Collect,

@@ -377,6 +377,7 @@ pub fn parse_def(
     let mut attribute_exprs = vec![];
     let mut attributes = vec![];
     let mut examples = vec![];
+    let mut search_terms: Vec<String> = vec![];
     let mut has_env_attribute = false;
     let mut has_wrapped_attribute = false;
 
@@ -412,6 +413,11 @@ pub fn parse_def(
                     CustomExample::from_value(value)
                         .expect("`attr examples` should have validated this"),
                 );
+            }
+            "search-terms" => {
+                let mut terms = <Vec<String>>::from_value(value)
+                    .expect("`attr search-terms` should have validated this");
+                search_terms.append(&mut terms);
             }
             _ => {
                 attributes.push((name.to_string(), value));
@@ -644,9 +650,10 @@ pub fn parse_def(
             signature.extra_description = extra_desc;
             signature.allows_unknown_args = has_wrapped;
 
-            *declaration = signature
-                .clone()
-                .into_block_command(block_id, attributes, examples);
+            *declaration =
+                signature
+                    .clone()
+                    .into_block_command(block_id, attributes, examples, search_terms);
 
             let block = working_set.get_block_mut(block_id);
             block.signature = signature;
@@ -814,7 +821,7 @@ pub fn parse_extern(
                         *declaration =
                             signature
                                 .clone()
-                                .into_block_command(block_id, vec![], vec![]);
+                                .into_block_command(block_id, vec![], vec![], vec![]);
 
                         working_set.get_block_mut(block_id).signature = signature;
                     }

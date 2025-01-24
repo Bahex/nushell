@@ -570,12 +570,14 @@ impl Signature {
         block_id: BlockId,
         attributes: Vec<(String, Value)>,
         examples: Vec<CustomExample>,
+        search_terms: Vec<String>,
     ) -> Box<dyn Command> {
         Box::new(BlockCommand {
             signature: self,
             block_id,
             attributes,
             examples,
+            search_terms,
         })
     }
 
@@ -686,6 +688,7 @@ struct BlockCommand {
     block_id: BlockId,
     attributes: Vec<(String, Value)>,
     examples: Vec<CustomExample>,
+    search_terms: Vec<String>,
 }
 
 impl Command for BlockCommand {
@@ -738,5 +741,9 @@ impl Command for BlockCommand {
             .iter()
             .map(CustomExample::to_example)
             .collect()
+    }
+
+    fn search_terms(&self) -> Vec<&str> {
+        self.search_terms.iter().map(|s| s.as_str()).collect()
     }
 }
