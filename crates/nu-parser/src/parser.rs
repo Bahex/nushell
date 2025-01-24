@@ -1283,7 +1283,7 @@ pub fn parse_call(working_set: &mut StateWorkingSet, spans: &[Span], head: Span)
         return garbage(working_set, head);
     }
 
-    let (cmd_start, pos, maybe_decl_id) = find_longest_decl(working_set, spans);
+    let (cmd_start, pos, maybe_decl_id) = find_longest_decl(working_set, spans, b"");
 
     if let Some(decl_id) = maybe_decl_id {
         // Before the internal parsing we check if there is no let or alias declarations
@@ -1383,6 +1383,7 @@ pub fn parse_call(working_set: &mut StateWorkingSet, spans: &[Span], head: Span)
 fn find_longest_decl(
     working_set: &mut StateWorkingSet<'_>,
     spans: &[Span],
+    prefix: &[u8],
 ) -> (
     usize,
     usize,
@@ -1392,6 +1393,7 @@ fn find_longest_decl(
     let cmd_start = pos;
     let mut name_spans = vec![];
     let mut name = vec![];
+    name.extend(prefix);
 
     for word_span in spans[cmd_start..].iter() {
         // Find the longest group of words that could form a command
@@ -1422,6 +1424,7 @@ fn find_longest_decl(
         pos -= 1;
 
         let mut name = vec![];
+        name.extend(prefix);
         for name_span in &name_spans {
             let name_part = working_set.get_span_contents(*name_span);
             if name.is_empty() {
@@ -1435,6 +1438,7 @@ fn find_longest_decl(
     }
     (cmd_start, pos, maybe_decl_id)
 }
+
 pub fn parse_binary(working_set: &mut StateWorkingSet, span: Span) -> Expression {
     trace!("parsing: binary");
     let contents = working_set.get_span_contents(span);
