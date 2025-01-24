@@ -193,6 +193,20 @@ impl Pipeline {
         }
     }
 
+    pub fn from_vec_separate(expressions: Vec<Expression>) -> Pipeline {
+        Self {
+            elements: expressions
+                .into_iter()
+                .enumerate()
+                .map(|(idx, expr)| PipelineElement {
+                    pipe: None,
+                    expr,
+                    redirection: None,
+                })
+                .collect(),
+        }
+    }
+
     pub fn len(&self) -> usize {
         self.elements.len()
     }

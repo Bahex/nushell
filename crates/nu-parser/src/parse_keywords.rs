@@ -375,20 +375,28 @@ pub fn parse_def(
 
     // TODO: Add sensible errors for theses
     let mut attributes = vec![];
+    let mut attribute_exprs = vec![];
+
     for lite_command in &lite_command.attributes {
         let (name, expr) = match parse_attribute(working_set, lite_command) {
             Ok(val) => val,
             Err(e) => {
-                return (garbage_pipeline(working_set, spans), None);
+                working_set.error(ParseError::UnknownCommand(Span::concat(
+                    &lite_command.parts,
+                )));
+                attribute_exprs.push(e);
+                continue;
             }
         };
         let name = name.strip_prefix("attr ").unwrap_or(&name);
         let value = match eval_constant(working_set, &expr) {
             Ok(val) => val,
             Err(e) => {
-                return (garbage_pipeline(working_set, spans), None);
+                attribute_exprs.push(garbage(working_set, Span::concat(&lite_command.parts)));
+                continue;
             }
         };
+        attribute_exprs.push(expr);
         attributes.push((name.to_string(), value));
     }
 
@@ -497,15 +505,13 @@ pub fn parse_def(
             };
 
             if starting_error_count != working_set.parse_errors.len() || is_help {
-                return (
-                    Pipeline::from_vec(vec![Expression::new(
-                        working_set,
-                        Expr::Call(call),
-                        call_span,
-                        output,
-                    )]),
-                    None,
-                );
+                attribute_exprs.push(Expression::new(
+                    working_set,
+                    Expr::Call(call),
+                    call_span,
+                    output,
+                ));
+                return (Pipeline::from_vec_separate(attribute_exprs), None);
             }
 
             (call, call_span)
@@ -541,15 +547,13 @@ pub fn parse_def(
                     "main".to_string(),
                     name_expr_span,
                 ));
-                return (
-                    Pipeline::from_vec(vec![Expression::new(
-                        working_set,
-                        Expr::Call(call),
-                        call_span,
-                        Type::Any,
-                    )]),
-                    None,
-                );
+                attribute_exprs.push(Expression::new(
+                    working_set,
+                    Expr::Call(call),
+                    call_span,
+                    Type::Any,
+                ));
+                return (Pipeline::from_vec_separate(attribute_exprs), None);
             }
         }
 
@@ -591,29 +595,25 @@ pub fn parse_def(
                             rest_var.declaration_span,
                             format!("...rest-like positional argument used in 'def --wrapped' supports only strings. Change the type annotation of ...{} to 'string'.", &rest.name)));
 
-                        return (
-                            Pipeline::from_vec(vec![Expression::new(
-                                working_set,
-                                Expr::Call(call),
-                                call_span,
-                                Type::Any,
-                            )]),
-                            result,
-                        );
+                        attribute_exprs.push(Expression::new(
+                            working_set,
+                            Expr::Call(call),
+                            call_span,
+                            Type::Any,
+                        ));
+                        return (Pipeline::from_vec_separate(attribute_exprs), result);
                     }
                 }
             } else {
                 working_set.error(ParseError::MissingPositional("...rest-like positional argument".to_string(), name_expr.span, "def --wrapped must have a ...rest-like positional argument. Add '...rest: string' to the command's signature.".to_string()));
 
-                return (
-                    Pipeline::from_vec(vec![Expression::new(
-                        working_set,
-                        Expr::Call(call),
-                        call_span,
-                        Type::Any,
-                    )]),
-                    result,
-                );
+                attribute_exprs.push(Expression::new(
+                    working_set,
+                    Expr::Call(call),
+                    call_span,
+                    Type::Any,
+                ));
+                return (Pipeline::from_vec_separate(attribute_exprs), result);
             }
         }
 
@@ -661,15 +661,13 @@ pub fn parse_def(
     // It's OK if it returns None: The decl was already merged in previous parse pass.
     working_set.merge_predecl(name.as_bytes());
 
-    (
-        Pipeline::from_vec(vec![Expression::new(
-            working_set,
-            Expr::Call(call),
-            call_span,
-            Type::Any,
-        )]),
-        result,
-    )
+    attribute_exprs.push(Expression::new(
+        working_set,
+        Expr::Call(call),
+        call_span,
+        Type::Any,
+    ));
+    (Pipeline::from_vec_separate(attribute_exprs), result)
 }
 
 pub fn parse_extern(
