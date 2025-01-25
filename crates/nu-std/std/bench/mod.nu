@@ -4,7 +4,7 @@
 #
 # > **Note**
 # > `std bench --pretty` will return a `string`.
-@example "measure the performance of simple addition" r#'bench { 1 + 2 } -n 10'# --result {
+@example "measure the performance of simple addition" { bench { 1 + 2 } -n 10 } --result {
     mean: (4µs + 956ns)
     std: (4µs + 831ns)
     times: [
@@ -20,7 +20,7 @@
         ( 3µs + 653ns)
     ]
 }
-@example "get a pretty benchmark report" r#'bench { 1 + 2 } --pretty'# --result "3µs 125ns +/- 2µs 408ns"
+@example "get a pretty benchmark report" { bench { 1 + 2 } --pretty } --result "3µs 125ns +/- 2µs 408ns"
 export def main [
     code: closure  # the piece of `nushell` code to measure the performance of
     --rounds (-n): int = 50  # the number of benchmark rounds (hopefully the more rounds the less variance)

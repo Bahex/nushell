@@ -7,16 +7,16 @@
 # Universal assert command
 #
 # If the condition is not true, it generates an error.
-@example "This assert passes" r#'assert (3 == 3)'#
-@example "This assert fails" r#'assert (42 == 3)'#
-@example "The --error-label flag can be used if you want to create a custom assert command:" (
-    r#'def "assert even" [number: int] {
+@example "This assert passes" { assert (3 == 3) }
+@example "This assert fails" { assert (42 == 3) }
+@example "The --error-label flag can be used if you want to create a custom assert command:" {
+    def "assert even" [number: int] {
         assert ($number mod 2 == 0) --error-label {
             text: $"($number) is not an even number",
             span: (metadata $number).span,
         }
-    }'#
-)
+    }
+}
 export def main [
     condition: bool, # Condition, which should be true
     message?: string, # Optional error message
@@ -36,16 +36,16 @@ export def main [
 # Negative assertion
 #
 # If the condition is not false, it generates an error.
-@example "This assert passes" r#'assert (42 == 3)'#
-@example "This assert fails" r#'assert (3 == 3)'#
-@example "The --error-label flag can be used if you want to create a custom assert command:" (
-    r#'def "assert not even" [number: int] {
+@example "This assert passes" { assert (42 == 3) }
+@example "This assert fails" { assert (3 == 3) }
+@example "The --error-label flag can be used if you want to create a custom assert command:" {
+    def "assert not even" [number: int] {
         assert not ($number mod 2 == 0) --error-label {
             span: (metadata $number).span,
             text: $"($number) is an even number",
         }
-    }'#
-)
+    }
+}
 export def not [
     condition: bool, # Condition, which should be false
     message?: string, # Optional error message
@@ -67,8 +67,8 @@ export def not [
 # Assert that executing the code generates an error
 #
 # For more documentation see the assert command
-@example "This assert passes" r#'assert error {|| missing_command}'#
-@example "This assert fails" r#'assert error {|| 12}'#
+@example "This assert passes" { assert error {|| missing_command} }
+@example "This assert fails" { assert error {|| 12} }
 export def error [
     code: closure,
     message?: string
@@ -86,9 +86,9 @@ export def error [
 # Assert $left == $right
 #
 # For more documentation see the assert command
-@example "This assert passes" r#'assert equal 1 1'#
-@example "This assert passes" r#'assert equal (0.1 + 0.2) 0.3'#
-@example "This assert fails" r#'assert equal 1 2'#
+@example "This assert passes" { assert equal 1 1 }
+@example "This assert passes" { assert equal (0.1 + 0.2) 0.3 }
+@example "This assert fails" { assert equal 1 2 }
 export def equal [left: any, right: any, message?: string] {
     main ($left == $right) $message --error-label {
         span: {
@@ -106,9 +106,9 @@ export def equal [left: any, right: any, message?: string] {
 # Assert $left != $right
 #
 # For more documentation see the assert command
-@example "This assert passes" r#'assert not equal 1 2'#
-@example "This assert passes" r#'assert not equal 1 "apple"'#
-@example "This assert fails" r#'assert not equal 7 7'#
+@example "This assert passes" { assert not equal 1 2 }
+@example "This assert passes" { assert not equal 1 "apple" }
+@example "This assert fails" { assert not equal 7 7 }
 export def "not equal" [left: any, right: any, message?: string] {
     main ($left != $right) $message --error-label {
         span: {
@@ -122,9 +122,9 @@ export def "not equal" [left: any, right: any, message?: string] {
 # Assert $left <= $right
 #
 # For more documentation see the assert command
-@example "This assert passes" r#'assert less or equal 1 2 # passes'#
-@example "This assert passes" r#'assert less or equal 1 1 # passes'#
-@example "This assert fails" r#'assert less or equal 1 0 # fails'#
+@example "This assert passes" { assert less or equal 1 2 }
+@example "This assert passes" { assert less or equal 1 1 }
+@example "This assert fails" { assert less or equal 1 0 }
 export def "less or equal" [left: any, right: any, message?: string] {
     main ($left <= $right) $message --error-label {
         span: {
@@ -142,8 +142,8 @@ export def "less or equal" [left: any, right: any, message?: string] {
 # Assert $left < $right
 #
 # For more documentation see the assert command
-@example "This assert passes" r#'assert less 1 2'#
-@example "This assert fails" r#'assert less 1 1'#
+@example "This assert passes" { assert less 1 2 }
+@example "This assert fails" { assert less 1 1 }
 export def less [left: any, right: any, message?: string] {
     main ($left < $right) $message --error-label {
         span: {
@@ -161,8 +161,8 @@ export def less [left: any, right: any, message?: string] {
 # Assert $left > $right
 #
 # For more documentation see the assert command
-@example "This assert passes" r#'assert greater 2 1'#
-@example "This assert fails" r#'assert greater 2 2'#
+@example "This assert passes" { assert greater 2 1 }
+@example "This assert fails" { assert greater 2 2 }
 export def greater [left: any, right: any, message?: string] {
     main ($left > $right) $message --error-label {
         span: {
@@ -180,9 +180,9 @@ export def greater [left: any, right: any, message?: string] {
 # Assert $left >= $right
 #
 # For more documentation see the assert command
-@example "This assert passes" r#'assert greater or equal 2 1'#
-@example "This assert passes" r#'assert greater or equal 2 2'#
-@example "This assert fails" r#'assert greater or equal 1 2'#
+@example "This assert passes" { assert greater or equal 2 1 }
+@example "This assert passes" { assert greater or equal 2 2 }
+@example "This assert fails" { assert greater or equal 1 2 }
 export def "greater or equal" [left: any, right: any, message?: string] {
     main ($left >= $right) $message --error-label {
         span: {
@@ -201,8 +201,8 @@ alias "core length" = length
 # Assert length of $left is $right
 #
 # For more documentation see the assert command
-@example "This assert passes" r#'assert length [0, 0] 2'#
-@example "This assert fails" r#'assert length [0] 3'#
+@example "This assert passes" { assert length [0, 0] 2 }
+@example "This assert fails" { assert length [0] 3 }
 export def length [left: list, right: int, message?: string] {
     main (($left | core length) == $right) $message --error-label {
         span: {
@@ -222,8 +222,8 @@ alias "core str contains" = str contains
 # Assert that ($left | str contains $right)
 #
 # For more documentation see the assert command
-@example "This assert passes" r#'assert str contains "arst" "rs"'#
-@example "This assert fails" r#'assert str contains "arst" "k"'#
+@example "This assert passes" { assert str contains "arst" "rs" }
+@example "This assert fails" { assert str contains "arst" "k" }
 export def "str contains" [left: string, right: string, message?: string] {
     main ($left | core str contains $right) $message --error-label {
         span: {

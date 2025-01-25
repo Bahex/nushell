@@ -1,13 +1,15 @@
 # Add the given paths to the PATH.
-@example "adding some dummy paths to an empty PATH" (
-    r#'with-env { PATH: [] } {
+@example "adding some dummy paths to an empty PATH" {
+    with-env { PATH: [] } {
         path add "foo"
         path add "bar" "baz"
         path add "fooo" --append
         path add "returned" --ret
-    }'#
-) --result [returned bar baz foo fooo]
-@example "adding paths based on the operating system" r#'path add {linux: "foo", windows: "bar", darwin: "baz"}'#
+    }
+} --result [returned bar baz foo fooo]
+@example "adding paths based on the operating system" {
+    path add {linux: "foo", windows: "bar", darwin: "baz"}
+}
 export def --env "path add" [
     --ret (-r)  # return $env.PATH, useful in pipelines to avoid scoping.
     --append (-a)  # append to $env.PATH instead of prepending to.
@@ -66,7 +68,9 @@ export def ellie [] {
 }
 
 # repeat anything a bunch of times, yielding a list of *n* times the input
-@example "repeat a string" r#'"foo" | std repeat 3 | str join'# --result "foofoofoo"
+@example "repeat a string" {
+    "foo" | std repeat 3 | str join
+} --result "foofoofoo"
 export def repeat [
     n: int  # the number of repetitions, must be positive
 ]: any -> list<any> {
@@ -98,7 +102,9 @@ export const null_device = if $nu.os-info.name == "windows" {
 }
 
 # return a null device file.
-@example "run a command and ignore it's stderr output" r#'cat xxx.txt e> (null-device)'#
+@example "run a command and ignore it's stderr output" {
+    cat xxx.txt e> (null-device)
+}
 export def null-device []: nothing -> path {
     $null_device
 }
