@@ -295,6 +295,7 @@ pub fn lite_parse(tokens: &[Token]) -> (LiteBlock, Option<ParseError>) {
                     command.comments.push(token.span);
                     curr_comment = None;
                 }
+                TokenContents::AttributeOperator => todo!(),
             }
         } else {
             match &token.contents {
@@ -417,6 +418,7 @@ pub fn lite_parse(tokens: &[Token]) -> (LiteBlock, Option<ParseError>) {
                         }
                     }
                 }
+                TokenContents::AttributeOperator => todo!(),
             }
         }
 

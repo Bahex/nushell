@@ -7,6 +7,7 @@ pub enum TokenContents {
     Pipe,
     PipePipe,
     AssignmentOperator,
+    AttributeOperator,
     ErrGreaterPipe,
     OutErrGreaterPipe,
     Semicolon,
@@ -309,6 +310,10 @@ pub fn lex_item(
     let output = match &input[(span.start - span_offset)..(span.end - span_offset)] {
         bytes if is_assignment_operator(bytes) => Token {
             contents: TokenContents::AssignmentOperator,
+            span,
+        },
+        b"@" => Token {
+            contents: TokenContents::AttributeOperator,
             span,
         },
         b"out>" | b"o>" => Token {
@@ -672,6 +677,19 @@ fn lex_internal(
         } else if c == b' ' || c == b'\t' || additional_whitespace.contains(&c) {
             // If the next character is non-newline whitespace, skip it.
             curr_offset += 1;
+        } else if c == b'@' {
+            if !is_complete && state.error.is_none() {
+                state.error = Some(ParseError::ExtraTokens(Span::new(
+                    curr_offset,
+                    curr_offset + 1,
+                )));
+            }
+            let idx = curr_offset;
+            curr_offset += 1;
+            state.output.push(Token::new(
+                TokenContents::AttributeOperator,
+                Span::new(state.span_offset + idx, state.span_offset + idx + 1),
+            ));
         } else {
             let (token, err) = lex_item(
                 state.input,
