@@ -234,7 +234,22 @@ pub fn lite_parse(tokens: &[Token]) -> (LiteBlock, Option<ParseError>) {
                         if last_token == TokenContents::Eol {
                             // Clear out the comment as we're entering a new comment
                             curr_comment = None;
-                            curr_attrs = None;
+                            if let Some(curr_attrs_inner) = &curr_attrs {
+                                // TODO: Add a more appropriate ParseError variant
+                                error = error.or(Some(ParseError::KeywordMissingArgument(
+                                    "command call".into(),
+                                    "attribute".into(),
+                                    Span::merge_many(
+                                        curr_attrs_inner
+                                            .last()
+                                            .expect("no attributes present in attribute block")
+                                            .parts
+                                            .iter()
+                                            .copied(),
+                                    ),
+                                )));
+                                curr_attrs = None;
+                            }
                         }
                     }
                     TokenContents::Semicolon => {
@@ -308,7 +323,22 @@ pub fn lite_parse(tokens: &[Token]) -> (LiteBlock, Option<ParseError>) {
                             if last_token == TokenContents::Eol {
                                 // Clear out the comment as we're entering a new comment
                                 curr_comment = None;
-                                curr_attrs = None;
+                                if let Some(curr_attrs_inner) = &curr_attrs {
+                                    // TODO: Add a more appropriate ParseError variant
+                                    error = error.or(Some(ParseError::KeywordMissingArgument(
+                                        "command call".into(),
+                                        "attribute".into(),
+                                        Span::merge_many(
+                                            curr_attrs_inner
+                                                .last()
+                                                .expect("no attributes present in attribute block")
+                                                .parts
+                                                .iter()
+                                                .copied(),
+                                        ),
+                                    )));
+                                    curr_attrs = None;
+                                }
                             } else {
                                 curr_attrs
                                     .get_or_insert_with(Default::default)
@@ -540,7 +570,22 @@ pub fn lite_parse(tokens: &[Token]) -> (LiteBlock, Option<ParseError>) {
                             if last_token == TokenContents::Eol {
                                 // Clear out the comment as we're entering a new comment
                                 curr_comment = None;
-                                curr_attrs = None;
+                                if let Some(curr_attrs_inner) = &curr_attrs {
+                                    // TODO: Add a more appropriate ParseError variant
+                                    error = error.or(Some(ParseError::KeywordMissingArgument(
+                                        "command call".into(),
+                                        "attribute".into(),
+                                        Span::merge_many(
+                                            curr_attrs_inner
+                                                .last()
+                                                .expect("no attributes present in attribute block")
+                                                .parts
+                                                .iter()
+                                                .copied(),
+                                        ),
+                                    )));
+                                    curr_attrs = None;
+                                }
                             } else if let Some(curr_attrs) = curr_attrs.take() {
                                 command.attributes = curr_attrs;
                             }
