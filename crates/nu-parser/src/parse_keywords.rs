@@ -374,45 +374,43 @@ pub fn parse_def(
     let (desc, extra_desc) = working_set.build_desc(&lite_command.comments);
 
     // TODO: Add sensible errors for theses
-    let mut attribute_exprs = vec![];
     let mut attributes = vec![];
     let mut examples = vec![];
     let mut search_terms: Vec<String> = vec![];
     let mut has_env_attribute = false;
     let mut has_wrapped_attribute = false;
 
+    let mut block = Block::new_with_capacity(lite_command.attributes.len());
+    if !lite_command.attributes.is_empty() {
+        block.span = Some(Span::merge_many(
+            lite_command
+                .attributes
+                .iter()
+                .flat_map(|attr| &attr.parts)
+                .copied(),
+        ));
+    }
+
     for lite_command in &lite_command.attributes {
-        let (name, expr) = match parse_attribute(working_set, lite_command) {
+        let (expr, name) = match parse_attribute(working_set, lite_command) {
             Ok(val) => val,
-            Err(e) => {
-                working_set.error(ParseError::UnknownCommand(Span::concat(
-                    &lite_command.parts,
-                )));
-                attribute_exprs.push(e);
+            Err(expr) => {
+                block.pipelines.push(Pipeline::from_vec(vec![expr]));
                 continue;
             }
         };
+
         let name = name.strip_prefix("attr ").unwrap_or(&name);
         let value = match eval_constant(working_set, &expr) {
             Ok(val) => val,
             Err(_) => {
-                attribute_exprs.push(garbage(working_set, Span::concat(&lite_command.parts)));
+                block.pipelines.push(Pipeline::from_vec(vec![expr]));
                 continue;
             }
         };
-        let span_end = expr.span.end;
-        attribute_exprs.push(expr);
-        // HACK: This lets attributes bypass return value type checking by inserting and invisible
-        // Nothing
-        attribute_exprs.push(Expression::new(
-            working_set,
-            Expr::Nothing,
-            Span {
-                start: span_end,
-                end: span_end,
-            },
-            Type::Nothing,
-        ));
+
+        block.pipelines.push(Pipeline::from_vec(vec![expr]));
+
         match name {
             "env" => {
                 has_env_attribute = true;
@@ -422,11 +420,15 @@ pub fn parse_def(
             }
             "example" => {
                 examples.push(
+                    // FIXME: We should validate it here again anyway, a custom `attr env`
+                    // definition can pass invalid data
                     CustomExample::from_value(value)
                         .expect("`attr examples` should have validated this"),
                 );
             }
             "search-terms" => {
+                // FIXME: We should validate it here again anyway, a custom `attr search-terms`
+                // definition can pass invalid data
                 let mut terms = <Vec<String>>::from_value(value)
                     .expect("`attr search-terms` should have validated this");
                 search_terms.append(&mut terms);
@@ -436,6 +438,21 @@ pub fn parse_def(
             }
         }
     }
+
+    let attr_block = if !block.pipelines.is_empty() {
+        let block_span = block
+            .span
+            .expect("Non empty pipelines means a span must exist");
+        let block_id = working_set.add_block(Arc::new(block));
+        Some(Expression::new(
+            working_set,
+            Expr::Block(block_id),
+            block_span,
+            Type::Nothing,
+        ))
+    } else {
+        None
+    };
 
     // Checking that the function is used with the correct name
     // Maybe this is not necessary but it is a sanity check
@@ -499,12 +516,13 @@ pub fn parse_def(
             }
 
             let starting_error_count = working_set.parse_errors.len();
-            let ParsedInternalCall { call, output } = parse_internal_call(
+            let ParsedInternalCall { mut call, output } = parse_internal_call(
                 working_set,
                 Span::concat(command_spans),
                 rest_spans,
                 decl_id,
             );
+            call.attr_block = attr_block;
             // This is to preserve the order of the errors so that
             // the check errors below come first
             let mut new_errors = working_set.parse_errors[starting_error_count..].to_vec();
@@ -542,13 +560,15 @@ pub fn parse_def(
             };
 
             if starting_error_count != working_set.parse_errors.len() || is_help {
-                attribute_exprs.push(Expression::new(
-                    working_set,
-                    Expr::Call(call),
-                    call_span,
-                    output,
-                ));
-                return (Pipeline::from_vec_separate(attribute_exprs), None);
+                return (
+                    Pipeline::from_vec(vec![Expression::new(
+                        working_set,
+                        Expr::Call(call),
+                        call_span,
+                        output,
+                    )]),
+                    None,
+                );
             }
 
             (call, call_span)
@@ -581,13 +601,15 @@ pub fn parse_def(
                     "main".to_string(),
                     name_expr_span,
                 ));
-                attribute_exprs.push(Expression::new(
-                    working_set,
-                    Expr::Call(call),
-                    call_span,
-                    Type::Any,
-                ));
-                return (Pipeline::from_vec_separate(attribute_exprs), None);
+                return (
+                    Pipeline::from_vec(vec![Expression::new(
+                        working_set,
+                        Expr::Call(call),
+                        call_span,
+                        Type::Any,
+                    )]),
+                    None,
+                );
             }
         }
 
@@ -629,25 +651,29 @@ pub fn parse_def(
                             rest_var.declaration_span,
                             format!("...rest-like positional argument used in 'def --wrapped' supports only strings. Change the type annotation of ...{} to 'string'.", &rest.name)));
 
-                        attribute_exprs.push(Expression::new(
-                            working_set,
-                            Expr::Call(call),
-                            call_span,
-                            Type::Any,
-                        ));
-                        return (Pipeline::from_vec_separate(attribute_exprs), result);
+                        return (
+                            Pipeline::from_vec(vec![Expression::new(
+                                working_set,
+                                Expr::Call(call),
+                                call_span,
+                                Type::Any,
+                            )]),
+                            result,
+                        );
                     }
                 }
             } else {
                 working_set.error(ParseError::MissingPositional("...rest-like positional argument".to_string(), name_expr.span, "def --wrapped must have a ...rest-like positional argument. Add '...rest: string' to the command's signature.".to_string()));
 
-                attribute_exprs.push(Expression::new(
-                    working_set,
-                    Expr::Call(call),
-                    call_span,
-                    Type::Any,
-                ));
-                return (Pipeline::from_vec_separate(attribute_exprs), result);
+                return (
+                    Pipeline::from_vec(vec![Expression::new(
+                        working_set,
+                        Expr::Call(call),
+                        call_span,
+                        Type::Any,
+                    )]),
+                    result,
+                );
             }
         }
 
@@ -698,13 +724,15 @@ pub fn parse_def(
     // It's OK if it returns None: The decl was already merged in previous parse pass.
     working_set.merge_predecl(name.as_bytes());
 
-    attribute_exprs.push(Expression::new(
-        working_set,
-        Expr::Call(call),
-        call_span,
-        Type::Any,
-    ));
-    (Pipeline::from_vec_separate(attribute_exprs), result)
+    (
+        Pipeline::from_vec(vec![Expression::new(
+            working_set,
+            Expr::Call(call),
+            call_span,
+            Type::Any,
+        )]),
+        result,
+    )
 }
 
 pub fn parse_extern(
@@ -1324,6 +1352,7 @@ pub fn parse_export_in_module(
         decl_id: export_decl_id,
         arguments: vec![],
         parser_info: HashMap::new(),
+        attr_block: None,
     });
 
     let exportables = if let Some(kw_span) = spans.get(1) {
@@ -2340,6 +2369,7 @@ pub fn parse_module(
             Argument::Positional(block_expr),
         ],
         parser_info: HashMap::new(),
+        attr_block: None,
     });
 
     (
@@ -3219,6 +3249,7 @@ pub fn parse_let(working_set: &mut StateWorkingSet, spans: &[Span]) -> Pipeline 
                         head: spans[0],
                         arguments: vec![Argument::Positional(lvalue), Argument::Positional(rvalue)],
                         parser_info: HashMap::new(),
+                        attr_block: None,
                     });
 
                     return Pipeline::from_vec(vec![Expression::new(
@@ -3377,6 +3408,7 @@ pub fn parse_const(working_set: &mut StateWorkingSet, spans: &[Span]) -> (Pipeli
                             Argument::Positional(rvalue),
                         ],
                         parser_info: HashMap::new(),
+                        attr_block: None,
                     });
 
                     return (
@@ -3502,6 +3534,7 @@ pub fn parse_mut(working_set: &mut StateWorkingSet, spans: &[Span]) -> Pipeline 
                         head: spans[0],
                         arguments: vec![Argument::Positional(lvalue), Argument::Positional(rvalue)],
                         parser_info: HashMap::new(),
+                        attr_block: None,
                     });
 
                     return Pipeline::from_vec(vec![Expression::new(

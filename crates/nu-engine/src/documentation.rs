@@ -236,6 +236,7 @@ fn get_documentation(
                         )),
                     ))],
                     parser_info: HashMap::new(),
+                    attr_block: None,
                 },
                 PipelineData::Value(Value::list(vals, span), None),
             ) {
@@ -360,6 +361,7 @@ fn update_ansi_from_config(
                         head: span,
                         arguments: vec![argument],
                         parser_info: HashMap::new(),
+                        attr_block: None,
                     },
                     PipelineData::Empty,
                 ) {

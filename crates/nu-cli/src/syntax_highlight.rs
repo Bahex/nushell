@@ -397,17 +397,29 @@ fn find_matching_block_end_in_expr(
                 }
             }
 
-            Expr::Call(call) => call.arguments.iter().find_map(|arg| {
-                arg.expr().and_then(|expr| {
+            Expr::Call(call) => {
+                if let Some(attr_block) = &call.attr_block {
                     find_matching_block_end_in_expr(
                         line,
                         working_set,
-                        expr,
+                        attr_block,
                         global_span_offset,
                         global_cursor_offset,
                     )
-                })
-            }),
+                } else {
+                    call.arguments.iter().find_map(|arg| {
+                        arg.expr().and_then(|expr| {
+                            find_matching_block_end_in_expr(
+                                line,
+                                working_set,
+                                expr,
+                                global_span_offset,
+                                global_cursor_offset,
+                            )
+                        })
+                    })
+                }
+            }
 
             Expr::FullCellPath(b) => find_matching_block_end_in_expr(
                 line,

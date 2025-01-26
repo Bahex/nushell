@@ -1428,7 +1428,7 @@ fn find_longest_decl(
 pub fn parse_attribute(
     working_set: &mut StateWorkingSet,
     lite_command: &LiteCommand,
-) -> Result<(String, Expression), Expression> {
+) -> Result<(Expression, String), Expression> {
     let spans = &lite_command.parts;
 
     let (cmd_start, cmd_end, name, decl_id) = find_longest_decl(working_set, spans, b"attr");
@@ -1464,13 +1464,13 @@ pub fn parse_attribute(
     };
 
     Ok((
-        name,
         Expression::new(
             working_set,
             Expr::Call(parsed_call.call),
             Span::concat(spans),
             parsed_call.output,
         ),
+        name,
     ))
 }
 
@@ -5732,6 +5732,7 @@ pub fn parse_expression(working_set: &mut StateWorkingSet, spans: &[Span]) -> Ex
                 decl_id,
                 arguments,
                 parser_info: HashMap::new(),
+                attr_block: None,
             }));
 
             Expression::new(working_set, expr, Span::concat(spans), ty)

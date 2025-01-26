@@ -62,6 +62,7 @@ impl Completer for CustomCompletion {
                     )),
                 ],
                 parser_info: HashMap::new(),
+                attr_block: None,
             },
             PipelineData::empty(),
         );
