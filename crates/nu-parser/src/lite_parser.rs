@@ -208,221 +208,35 @@ pub fn lite_parse(
     let mut pipeline = LitePipeline::default();
     let mut command = LiteCommand::default();
 
-    let mut curr_attr: Option<Vec<LiteCommand>> = None;
+    let mut curr_attrs: Option<Vec<LiteCommand>> = None;
+    let mut attribute = LiteCommand::default();
+
+    enum Mode {
+        Normal,
+        Assignment,
+        Attribute,
+    }
 
     let mut last_token = TokenContents::Eol;
     let mut file_redirection = None;
     let mut curr_comment: Option<Vec<Span>> = None;
-    let mut is_assignment = false;
+    let mut mode: Mode = Mode::Normal;
     let mut error = None;
 
     for (idx, token) in tokens.iter().enumerate() {
-        if is_assignment {
-            match &token.contents {
-                // Consume until semicolon or terminating EOL. Assignments absorb pipelines and
-                // redirections.
-                TokenContents::Eol => {
-                    // Handle `[Command] [Pipe] ([Comment] | [Eol])+ [Command]`
-                    //
-                    // `[Eol]` branch checks if previous token is `[Pipe]` to construct pipeline
-                    // and so `[Comment] | [Eol]` should be ignore to make it work
-                    let actual_token = last_non_comment_token(tokens, idx);
-                    if actual_token != Some(TokenContents::Pipe) {
-                        is_assignment = false;
-                        pipeline.push(&mut command);
-                        block.push(&mut pipeline);
-                    }
-
-                    if last_token == TokenContents::Eol {
-                        // Clear out the comment as we're entering a new comment
-                        curr_comment = None;
-                    }
-                }
-                TokenContents::Semicolon => {
-                    is_assignment = false;
-                    pipeline.push(&mut command);
-                    block.push(&mut pipeline);
-                }
-                TokenContents::Comment => {
-                    command.comments.push(token.span);
-                    curr_comment = None;
-                }
-                _ => command.push(token.span),
-            }
-        } else if let Some((source, append, span)) = file_redirection.take() {
-            match &token.contents {
-                TokenContents::PipePipe => {
-                    error = error.or(Some(ParseError::ShellOrOr(token.span)));
-                    command.push(span);
-                    command.push(token.span);
-                }
-                TokenContents::Item => {
-                    let target = LiteRedirectionTarget::File {
-                        connector: span,
-                        file: token.span,
-                        append,
-                    };
-                    if let Err(err) = command.try_add_redirection(source, target) {
-                        error = error.or(Some(err));
-                        command.push(span);
-                        command.push(token.span)
-                    }
-                }
-                TokenContents::AssignmentOperator => {
-                    error = error.or(Some(ParseError::Expected("redirection target", token.span)));
-                    command.push(span);
-                    command.push(token.span);
-                }
-                TokenContents::OutGreaterThan
-                | TokenContents::OutGreaterGreaterThan
-                | TokenContents::ErrGreaterThan
-                | TokenContents::ErrGreaterGreaterThan
-                | TokenContents::OutErrGreaterThan
-                | TokenContents::OutErrGreaterGreaterThan => {
-                    error = error.or(Some(ParseError::Expected("redirection target", token.span)));
-                    command.push(span);
-                    command.push(token.span);
-                }
-                TokenContents::Pipe
-                | TokenContents::ErrGreaterPipe
-                | TokenContents::OutErrGreaterPipe => {
-                    error = error.or(Some(ParseError::Expected("redirection target", token.span)));
-                    command.push(span);
-                    pipeline.push(&mut command);
-                    command.pipe = Some(token.span);
-                }
-                TokenContents::Eol => {
-                    error = error.or(Some(ParseError::Expected("redirection target", token.span)));
-                    command.push(span);
-                    pipeline.push(&mut command);
-                }
-                TokenContents::Semicolon => {
-                    error = error.or(Some(ParseError::Expected("redirection target", token.span)));
-                    command.push(span);
-                    pipeline.push(&mut command);
-                    block.push(&mut pipeline);
-                }
-                TokenContents::Comment => {
-                    error = error.or(Some(ParseError::Expected("redirection target", span)));
-                    command.push(span);
-                    command.comments.push(token.span);
-                    curr_comment = None;
-                }
-            }
-        } else {
-            match &token.contents {
-                TokenContents::PipePipe => {
-                    error = error.or(Some(ParseError::ShellOrOr(token.span)));
-                    command.push(token.span);
-                }
-                TokenContents::Item => {
-                    // This is commented out to preserve old parser behavior,
-                    // but we should probably error here.
-                    //
-                    // if element.redirection.is_some() {
-                    //     error = error.or(Some(ParseError::LabeledError(
-                    //         "Unexpected positional".into(),
-                    //         "cannot add positional arguments after output redirection".into(),
-                    //         token.span,
-                    //     )));
-                    // }
-                    //
-                    // For example, this is currently allowed: ^echo thing o> out.txt extra_arg
-
-                    // If we have a comment, go ahead and attach it
-                    if let Some(curr_comment) = curr_comment.take() {
-                        command.comments = curr_comment;
-                    }
-                    // If we have attributes, go ahead and attach them
-                    if let Some(curr_attr) = curr_attr.take() {
-                        command.attributes = curr_attr;
-                    }
-                    command.push(token.span);
-                }
-                TokenContents::AssignmentOperator => {
-                    // When in assignment mode, we'll just consume pipes or redirections as part of
-                    // the command.
-                    is_assignment = true;
-                    if let Some(curr_comment) = curr_comment.take() {
-                        command.comments = curr_comment;
-                    }
-                    command.push(token.span);
-                }
-                TokenContents::OutGreaterThan => {
-                    error = error.or(command.check_accepts_redirection(token.span));
-                    file_redirection = Some((RedirectionSource::Stdout, false, token.span));
-                }
-                TokenContents::OutGreaterGreaterThan => {
-                    error = error.or(command.check_accepts_redirection(token.span));
-                    file_redirection = Some((RedirectionSource::Stdout, true, token.span));
-                }
-                TokenContents::ErrGreaterThan => {
-                    error = error.or(command.check_accepts_redirection(token.span));
-                    file_redirection = Some((RedirectionSource::Stderr, false, token.span));
-                }
-                TokenContents::ErrGreaterGreaterThan => {
-                    error = error.or(command.check_accepts_redirection(token.span));
-                    file_redirection = Some((RedirectionSource::Stderr, true, token.span));
-                }
-                TokenContents::OutErrGreaterThan => {
-                    error = error.or(command.check_accepts_redirection(token.span));
-                    file_redirection =
-                        Some((RedirectionSource::StdoutAndStderr, false, token.span));
-                }
-                TokenContents::OutErrGreaterGreaterThan => {
-                    error = error.or(command.check_accepts_redirection(token.span));
-                    file_redirection = Some((RedirectionSource::StdoutAndStderr, true, token.span));
-                }
-                TokenContents::ErrGreaterPipe => {
-                    let target = LiteRedirectionTarget::Pipe {
-                        connector: token.span,
-                    };
-                    if let Err(err) = command.try_add_redirection(RedirectionSource::Stderr, target)
-                    {
-                        error = error.or(Some(err));
-                    }
-                    pipeline.push(&mut command);
-                    command.pipe = Some(token.span);
-                }
-                TokenContents::OutErrGreaterPipe => {
-                    let target = LiteRedirectionTarget::Pipe {
-                        connector: token.span,
-                    };
-                    if let Err(err) =
-                        command.try_add_redirection(RedirectionSource::StdoutAndStderr, target)
-                    {
-                        error = error.or(Some(err));
-                    }
-                    pipeline.push(&mut command);
-                    command.pipe = Some(token.span);
-                }
-                TokenContents::Pipe => {
-                    pipeline.push(&mut command);
-                    command.pipe = Some(token.span);
-                }
-                TokenContents::Eol => {
-                    if command_is_attribute(&command, working_set) {
-                        // Get rid of the `@`
-                        command.parts[0].start += 1;
-                        curr_comment
-                            .get_or_insert(Vec::new())
-                            .append(&mut command.comments);
-                        curr_attr
-                            .get_or_insert(Vec::new())
-                            .append(&mut command.attributes);
-                        curr_attr
-                            .get_or_insert(Vec::new())
-                            .push(mem::take(&mut command));
-                    } else {
-                        if let Some(curr_attr) = curr_attr.take() {
-                            command.attributes = curr_attr;
-                        }
+        match mode {
+            Mode::Assignment => {
+                match &token.contents {
+                    // Consume until semicolon or terminating EOL. Assignments absorb pipelines and
+                    // redirections.
+                    TokenContents::Eol => {
                         // Handle `[Command] [Pipe] ([Comment] | [Eol])+ [Command]`
                         //
                         // `[Eol]` branch checks if previous token is `[Pipe]` to construct pipeline
                         // and so `[Comment] | [Eol]` should be ignore to make it work
                         let actual_token = last_non_comment_token(tokens, idx);
                         if actual_token != Some(TokenContents::Pipe) {
+                            mode = Mode::Normal;
                             pipeline.push(&mut command);
                             block.push(&mut pipeline);
                         }
@@ -432,22 +246,344 @@ pub fn lite_parse(
                             curr_comment = None;
                         }
                     }
-                }
-                TokenContents::Semicolon => {
-                    pipeline.push(&mut command);
-                    block.push(&mut pipeline);
-                }
-                TokenContents::Comment => {
-                    // Comment is beside something
-                    if last_token != TokenContents::Eol {
+                    TokenContents::Semicolon => {
+                        mode = Mode::Normal;
+                        pipeline.push(&mut command);
+                        block.push(&mut pipeline);
+                    }
+                    TokenContents::Comment => {
                         command.comments.push(token.span);
                         curr_comment = None;
-                    } else {
-                        // Comment precedes something
-                        if let Some(curr_comment) = &mut curr_comment {
-                            curr_comment.push(token.span);
-                        } else {
-                            curr_comment = Some(vec![token.span]);
+                    }
+                    _ => command.push(token.span),
+                }
+            }
+            Mode::Attribute => {
+                if let Some((_source, _append, span)) = file_redirection.take() {
+                    error = error.or(Some(ParseError::UnexpectedRedirection { span }));
+                    command.push(span);
+                    command.push(token.span);
+                } else {
+                    match &token.contents {
+                        TokenContents::PipePipe => {
+                            error = error.or(Some(ParseError::ShellOrOr(token.span)));
+                            command.push(token.span);
+                        }
+                        TokenContents::Item => {
+                            // This is commented out to preserve old parser behavior,
+                            // but we should probably error here.
+                            //
+                            // if element.redirection.is_some() {
+                            //     error = error.or(Some(ParseError::LabeledError(
+                            //         "Unexpected positional".into(),
+                            //         "cannot add positional arguments after output redirection".into(),
+                            //         token.span,
+                            //     )));
+                            // }
+                            //
+                            // For example, this is currently allowed: ^echo thing o> out.txt extra_arg
+                            attribute.push(token.span);
+                        }
+                        TokenContents::AssignmentOperator => {
+                            error = error.or(Some(ParseError::AssignInPipeline(
+                                "".into(),
+                                "".into(),
+                                "".into(),
+                                token.span,
+                            )));
+                            // When in assignment mode, we'll just consume pipes or redirections as part of
+                            // the command.
+                            mode = Mode::Normal;
+                            attribute.push(token.span);
+                        }
+                        TokenContents::AttributeOperator => {
+                            error = error
+                                .or(Some(ParseError::UnexpectedKeyword("".into(), token.span)));
+                        }
+                        TokenContents::OutGreaterThan => {
+                            error = error.or(command.check_accepts_redirection(token.span));
+                            file_redirection = Some((RedirectionSource::Stdout, false, token.span));
+                        }
+                        TokenContents::OutGreaterGreaterThan => {
+                            error = error.or(command.check_accepts_redirection(token.span));
+                            file_redirection = Some((RedirectionSource::Stdout, true, token.span));
+                        }
+                        TokenContents::ErrGreaterThan => {
+                            error = error.or(command.check_accepts_redirection(token.span));
+                            file_redirection = Some((RedirectionSource::Stderr, false, token.span));
+                        }
+                        TokenContents::ErrGreaterGreaterThan => {
+                            error = error.or(command.check_accepts_redirection(token.span));
+                            file_redirection = Some((RedirectionSource::Stderr, true, token.span));
+                        }
+                        TokenContents::OutErrGreaterThan => {
+                            error = error.or(command.check_accepts_redirection(token.span));
+                            file_redirection =
+                                Some((RedirectionSource::StdoutAndStderr, false, token.span));
+                        }
+                        TokenContents::OutErrGreaterGreaterThan => {
+                            error = error.or(command.check_accepts_redirection(token.span));
+                            file_redirection =
+                                Some((RedirectionSource::StdoutAndStderr, true, token.span));
+                        }
+                        TokenContents::ErrGreaterPipe => {
+                            let target = LiteRedirectionTarget::Pipe {
+                                connector: token.span,
+                            };
+                            if let Err(err) =
+                                command.try_add_redirection(RedirectionSource::Stderr, target)
+                            {
+                                error = error.or(Some(err));
+                            }
+                            pipeline.push(&mut command);
+                            command.pipe = Some(token.span);
+                        }
+                        TokenContents::OutErrGreaterPipe => {
+                            let target = LiteRedirectionTarget::Pipe {
+                                connector: token.span,
+                            };
+                            if let Err(err) = command
+                                .try_add_redirection(RedirectionSource::StdoutAndStderr, target)
+                            {
+                                error = error.or(Some(err));
+                            }
+                            pipeline.push(&mut command);
+                            command.pipe = Some(token.span);
+                        }
+                        TokenContents::Pipe => {
+                            error = error.or(Some(ParseError::IncompleteParser(token.span)));
+                            command.pipe = Some(token.span);
+                        }
+                        TokenContents::Eol | TokenContents::Semicolon => {
+                            mode = Mode::Normal;
+                            curr_attrs
+                                .get_or_insert_with(Default::default)
+                                .push(mem::take(&mut attribute));
+                        }
+                        TokenContents::Comment => {
+                            // Comment is beside something
+                            if last_token != TokenContents::Eol {
+                                command.comments.push(token.span);
+                                curr_comment = None;
+                            } else {
+                                // Comment precedes something
+                                if let Some(curr_comment) = &mut curr_comment {
+                                    curr_comment.push(token.span);
+                                } else {
+                                    curr_comment = Some(vec![token.span]);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            Mode::Normal => {
+                if let Some((source, append, span)) = file_redirection.take() {
+                    match &token.contents {
+                        TokenContents::PipePipe => {
+                            error = error.or(Some(ParseError::ShellOrOr(token.span)));
+                            command.push(span);
+                            command.push(token.span);
+                        }
+                        TokenContents::Item => {
+                            let target = LiteRedirectionTarget::File {
+                                connector: span,
+                                file: token.span,
+                                append,
+                            };
+                            if let Err(err) = command.try_add_redirection(source, target) {
+                                error = error.or(Some(err));
+                                command.push(span);
+                                command.push(token.span)
+                            }
+                        }
+                        TokenContents::AssignmentOperator => {
+                            error = error
+                                .or(Some(ParseError::Expected("redirection target", token.span)));
+                            command.push(span);
+                            command.push(token.span);
+                        }
+                        TokenContents::AttributeOperator => {
+                            todo!();
+                        }
+                        TokenContents::OutGreaterThan
+                        | TokenContents::OutGreaterGreaterThan
+                        | TokenContents::ErrGreaterThan
+                        | TokenContents::ErrGreaterGreaterThan
+                        | TokenContents::OutErrGreaterThan
+                        | TokenContents::OutErrGreaterGreaterThan => {
+                            error = error
+                                .or(Some(ParseError::Expected("redirection target", token.span)));
+                            command.push(span);
+                            command.push(token.span);
+                        }
+                        TokenContents::Pipe
+                        | TokenContents::ErrGreaterPipe
+                        | TokenContents::OutErrGreaterPipe => {
+                            error = error
+                                .or(Some(ParseError::Expected("redirection target", token.span)));
+                            command.push(span);
+                            pipeline.push(&mut command);
+                            command.pipe = Some(token.span);
+                        }
+                        TokenContents::Eol => {
+                            error = error
+                                .or(Some(ParseError::Expected("redirection target", token.span)));
+                            command.push(span);
+                            pipeline.push(&mut command);
+                        }
+                        TokenContents::Semicolon => {
+                            error = error
+                                .or(Some(ParseError::Expected("redirection target", token.span)));
+                            command.push(span);
+                            pipeline.push(&mut command);
+                            block.push(&mut pipeline);
+                        }
+                        TokenContents::Comment => {
+                            error =
+                                error.or(Some(ParseError::Expected("redirection target", span)));
+                            command.push(span);
+                            command.comments.push(token.span);
+                            curr_comment = None;
+                        }
+                    }
+                } else {
+                    match &token.contents {
+                        TokenContents::PipePipe => {
+                            error = error.or(Some(ParseError::ShellOrOr(token.span)));
+                            command.push(token.span);
+                        }
+                        TokenContents::Item => {
+                            // This is commented out to preserve old parser behavior,
+                            // but we should probably error here.
+                            //
+                            // if element.redirection.is_some() {
+                            //     error = error.or(Some(ParseError::LabeledError(
+                            //         "Unexpected positional".into(),
+                            //         "cannot add positional arguments after output redirection".into(),
+                            //         token.span,
+                            //     )));
+                            // }
+                            //
+                            // For example, this is currently allowed: ^echo thing o> out.txt extra_arg
+
+                            // If we have a comment, go ahead and attach it
+                            if let Some(curr_comment) = curr_comment.take() {
+                                command.comments = curr_comment;
+                            }
+                            // If we have attributes, go ahead and attach them
+                            if let Some(curr_attrs) = curr_attrs.take() {
+                                command.attributes = curr_attrs;
+                            }
+                            command.push(token.span);
+                        }
+                        TokenContents::AssignmentOperator => {
+                            // When in assignment mode, we'll just consume pipes or redirections as part of
+                            // the command.
+                            mode = Mode::Assignment;
+                            if let Some(curr_comment) = curr_comment.take() {
+                                command.comments = curr_comment;
+                            }
+                            command.push(token.span);
+                        }
+                        TokenContents::AttributeOperator => {
+                            mode = Mode::Attribute;
+                            // if let Some(curr_comment) = curr_comment.take() {
+                            //     if !curr_comment.is_empty() {
+                            //         todo!();
+                            //     }
+                            // }
+                        }
+                        TokenContents::OutGreaterThan => {
+                            error = error.or(command.check_accepts_redirection(token.span));
+                            file_redirection = Some((RedirectionSource::Stdout, false, token.span));
+                        }
+                        TokenContents::OutGreaterGreaterThan => {
+                            error = error.or(command.check_accepts_redirection(token.span));
+                            file_redirection = Some((RedirectionSource::Stdout, true, token.span));
+                        }
+                        TokenContents::ErrGreaterThan => {
+                            error = error.or(command.check_accepts_redirection(token.span));
+                            file_redirection = Some((RedirectionSource::Stderr, false, token.span));
+                        }
+                        TokenContents::ErrGreaterGreaterThan => {
+                            error = error.or(command.check_accepts_redirection(token.span));
+                            file_redirection = Some((RedirectionSource::Stderr, true, token.span));
+                        }
+                        TokenContents::OutErrGreaterThan => {
+                            error = error.or(command.check_accepts_redirection(token.span));
+                            file_redirection =
+                                Some((RedirectionSource::StdoutAndStderr, false, token.span));
+                        }
+                        TokenContents::OutErrGreaterGreaterThan => {
+                            error = error.or(command.check_accepts_redirection(token.span));
+                            file_redirection =
+                                Some((RedirectionSource::StdoutAndStderr, true, token.span));
+                        }
+                        TokenContents::ErrGreaterPipe => {
+                            let target = LiteRedirectionTarget::Pipe {
+                                connector: token.span,
+                            };
+                            if let Err(err) =
+                                command.try_add_redirection(RedirectionSource::Stderr, target)
+                            {
+                                error = error.or(Some(err));
+                            }
+                            pipeline.push(&mut command);
+                            command.pipe = Some(token.span);
+                        }
+                        TokenContents::OutErrGreaterPipe => {
+                            let target = LiteRedirectionTarget::Pipe {
+                                connector: token.span,
+                            };
+                            if let Err(err) = command
+                                .try_add_redirection(RedirectionSource::StdoutAndStderr, target)
+                            {
+                                error = error.or(Some(err));
+                            }
+                            pipeline.push(&mut command);
+                            command.pipe = Some(token.span);
+                        }
+                        TokenContents::Pipe => {
+                            pipeline.push(&mut command);
+                            command.pipe = Some(token.span);
+                        }
+                        TokenContents::Eol => {
+                            if let Some(curr_attrs) = curr_attrs.take() {
+                                command.attributes = curr_attrs;
+                            }
+                            // Handle `[Command] [Pipe] ([Comment] | [Eol])+ [Command]`
+                            //
+                            // `[Eol]` branch checks if previous token is `[Pipe]` to construct pipeline
+                            // and so `[Comment] | [Eol]` should be ignore to make it work
+                            let actual_token = last_non_comment_token(tokens, idx);
+                            if actual_token != Some(TokenContents::Pipe) {
+                                pipeline.push(&mut command);
+                                block.push(&mut pipeline);
+                            }
+
+                            if last_token == TokenContents::Eol {
+                                // Clear out the comment as we're entering a new comment
+                                curr_comment = None;
+                            }
+                        }
+                        TokenContents::Semicolon => {
+                            pipeline.push(&mut command);
+                            block.push(&mut pipeline);
+                        }
+                        TokenContents::Comment => {
+                            // Comment is beside something
+                            if last_token != TokenContents::Eol {
+                                command.comments.push(token.span);
+                                curr_comment = None;
+                            } else {
+                                // Comment precedes something
+                                if let Some(curr_comment) = &mut curr_comment {
+                                    curr_comment.push(token.span);
+                                } else {
+                                    curr_comment = Some(vec![token.span]);
+                                }
+                            }
                         }
                     }
                 }
