@@ -3,7 +3,7 @@
 
 use crate::{Token, TokenContents};
 use itertools::{Either, Itertools};
-use nu_protocol::{ast::RedirectionSource, engine::StateWorkingSet, ParseError, Span};
+use nu_protocol::{ast::RedirectionSource, ParseError, Span};
 use std::mem;
 
 #[derive(Debug, Clone, Copy)]
@@ -189,17 +189,7 @@ fn last_non_comment_token(tokens: &[Token], cur_idx: usize) -> Option<TokenConte
     None
 }
 
-fn command_is_attribute(command: &LiteCommand, working_set: &StateWorkingSet) -> bool {
-    let Some(cmd) = command.parts.first() else {
-        return false;
-    };
-    working_set.get_span_contents(*cmd).starts_with(b"@")
-}
-
-pub fn lite_parse(
-    tokens: &[Token],
-    working_set: &StateWorkingSet,
-) -> (LiteBlock, Option<ParseError>) {
+pub fn lite_parse(tokens: &[Token]) -> (LiteBlock, Option<ParseError>) {
     if tokens.is_empty() {
         return (LiteBlock::default(), None);
     }
