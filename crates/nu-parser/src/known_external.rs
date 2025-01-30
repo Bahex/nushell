@@ -9,8 +9,6 @@ use nu_protocol::{
 pub struct KnownExternal {
     pub name: String,
     pub signature: Box<Signature>,
-    pub description: String,
-    pub extra_description: String,
 }
 
 impl Command for KnownExternal {
@@ -23,7 +21,11 @@ impl Command for KnownExternal {
     }
 
     fn description(&self) -> &str {
-        &self.description
+        &self.signature.description
+    }
+
+    fn extra_description(&self) -> &str {
+        &self.signature.extra_description
     }
 
     fn command_type(&self) -> CommandType {

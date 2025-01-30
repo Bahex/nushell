@@ -875,10 +875,11 @@ pub fn parse_extern(
                         );
                     }
 
+                    signature.description = description;
+                    signature.extra_description = extra_description;
+
                     let decl = KnownExternal {
                         name: external_name,
-                        description,
-                        extra_description,
                         signature,
                     };
 
