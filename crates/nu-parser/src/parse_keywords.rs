@@ -402,7 +402,8 @@ pub fn parse_def(
         let name = name.strip_prefix("attr ").unwrap_or(&name);
         let value = match eval_constant(working_set, &expr) {
             Ok(val) => val,
-            Err(_) => {
+            Err(e) => {
+                working_set.error(e.wrap(working_set, expr.span));
                 block.pipelines.push(Pipeline::from_vec(vec![expr]));
                 continue;
             }
