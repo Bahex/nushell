@@ -743,6 +743,78 @@ pub fn parse_extern(
 
     let (description, extra_description) = working_set.build_desc(&lite_command.comments);
 
+    let mut attributes = vec![];
+    let mut examples = vec![];
+    let mut search_terms: Vec<String> = vec![];
+
+    let mut block = Block::new_with_capacity(lite_command.attributes.len());
+    if !lite_command.attributes.is_empty() {
+        block.span = Some(Span::merge_many(
+            lite_command
+                .attributes
+                .iter()
+                .flat_map(|attr| &attr.parts)
+                .copied(),
+        ));
+    }
+
+    for lite_command in &lite_command.attributes {
+        let (expr, name) = match parse_attribute(working_set, lite_command) {
+            Ok(val) => val,
+            Err(expr) => {
+                block.pipelines.push(Pipeline::from_vec(vec![expr]));
+                continue;
+            }
+        };
+
+        let name = name.strip_prefix("attr ").unwrap_or(&name);
+        let value = match eval_constant(working_set, &expr) {
+            Ok(val) => val,
+            Err(_) => {
+                block.pipelines.push(Pipeline::from_vec(vec![expr]));
+                continue;
+            }
+        };
+
+        block.pipelines.push(Pipeline::from_vec(vec![expr]));
+
+        match name {
+            "example" => {
+                examples.push(
+                    // FIXME: We should validate it here again anyway, a custom `attr example`
+                    // definition can pass invalid data
+                    CustomExample::from_value(value)
+                        .expect("`attr examples` should have validated this"),
+                );
+            }
+            "search-terms" => {
+                // FIXME: We should validate it here again anyway, a custom `attr search-terms`
+                // definition can pass invalid data
+                let mut terms = <Vec<String>>::from_value(value)
+                    .expect("`attr search-terms` should have validated this");
+                search_terms.append(&mut terms);
+            }
+            _ => {
+                attributes.push((name.to_string(), value));
+            }
+        }
+    }
+
+    let attr_block = if !block.pipelines.is_empty() {
+        let block_span = block
+            .span
+            .expect("Non empty pipelines means a span must exist");
+        let block_id = working_set.add_block(Arc::new(block));
+        Some(Expression::new(
+            working_set,
+            Expr::Block(block_id),
+            block_span,
+            Type::Nothing,
+        ))
+    } else {
+        None
+    };
+
     // Checking that the function is used with the correct name
     // Maybe this is not necessary but it is a sanity check
 
@@ -793,12 +865,15 @@ pub fn parse_extern(
                 }
             }
 
-            let ParsedInternalCall { call, .. } = parse_internal_call(
+            let ParsedInternalCall { mut call, .. } = parse_internal_call(
                 working_set,
                 Span::concat(command_spans),
                 rest_spans,
                 decl_id,
             );
+
+            call.attr_block = attr_block;
+
             working_set.exit_scope();
 
             let call_span = Span::concat(spans);
@@ -881,6 +956,9 @@ pub fn parse_extern(
                     let decl = KnownExternal {
                         name: external_name,
                         signature,
+                        attributes,
+                        examples,
+                        search_terms,
                     };
 
                     *declaration = Box::new(decl);
