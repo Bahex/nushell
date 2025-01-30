@@ -16,7 +16,7 @@ use nu_protocol::{
     eval_const::eval_constant,
     parser_path::ParserPath,
     Alias, BlockId, CustomExample, DeclId, FromValue, Module, ModuleId, ParseError, PositionalArg,
-    ResolvedImportPattern, Span, Spanned, SyntaxShape, Type, Value, VarId,
+    ResolvedImportPattern, ShellError, Span, Spanned, SyntaxShape, Type, Value, VarId,
 };
 use std::{
     collections::{HashMap, HashSet},
@@ -399,11 +399,13 @@ pub fn parse_def(
             }
         };
 
+        let expr_span = expr.span;
+
         let name = name.strip_prefix("attr ").unwrap_or(&name);
         let value = match eval_constant(working_set, &expr) {
             Ok(val) => val,
             Err(e) => {
-                working_set.error(e.wrap(working_set, expr.span));
+                working_set.error(e.wrap(working_set, expr_span));
                 block.pipelines.push(Pipeline::from_vec(vec![expr]));
                 continue;
             }
@@ -418,21 +420,34 @@ pub fn parse_def(
             "wrapped" => {
                 has_wrapped_attribute = true;
             }
-            "example" => {
-                examples.push(
-                    // FIXME: We should validate it here again anyway, a custom `attr example`
-                    // definition can pass invalid data
-                    CustomExample::from_value(value)
-                        .expect("`attr examples` should have validated this"),
-                );
-            }
-            "search-terms" => {
-                // FIXME: We should validate it here again anyway, a custom `attr search-terms`
-                // definition can pass invalid data
-                let mut terms = <Vec<String>>::from_value(value)
-                    .expect("`attr search-terms` should have validated this");
-                search_terms.append(&mut terms);
-            }
+            "example" => match CustomExample::from_value(value) {
+                Ok(example) => examples.push(example),
+                Err(_) => {
+                    let e = ShellError::GenericError {
+                        error: "nu::shell::invalid_example".into(),
+                        msg: "Value couldn't be converted to an example".into(),
+                        span: Some(expr_span),
+                        help: Some("Is `attr example` shadowed?".into()),
+                        inner: vec![],
+                    };
+                    working_set.error(e.wrap(working_set, expr_span));
+                }
+            },
+            "search-terms" => match <Vec<String>>::from_value(value) {
+                Ok(mut terms) => {
+                    search_terms.append(&mut terms);
+                }
+                Err(_) => {
+                    let e = ShellError::GenericError {
+                        error: "nu::shell::invalid_search_terms".into(),
+                        msg: "Value couldn't be converted to search-terms".into(),
+                        span: Some(expr_span),
+                        help: Some("Is `attr search-terms` shadowed?".into()),
+                        inner: vec![],
+                    };
+                    working_set.error(e.wrap(working_set, expr_span));
+                }
+            },
             _ => {
                 attributes.push((name.to_string(), value));
             }
