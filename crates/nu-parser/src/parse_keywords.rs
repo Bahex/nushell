@@ -419,7 +419,7 @@ pub fn parse_def(
             }
             "example" => {
                 examples.push(
-                    // FIXME: We should validate it here again anyway, a custom `attr env`
+                    // FIXME: We should validate it here again anyway, a custom `attr example`
                     // definition can pass invalid data
                     CustomExample::from_value(value)
                         .expect("`attr examples` should have validated this"),
