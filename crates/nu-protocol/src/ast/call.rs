@@ -7,6 +7,8 @@ use crate::{
     ShellError, Span, Spanned, Value,
 };
 
+use super::AttributeBlock;
+
 /// Parsed command arguments
 ///
 /// Primarily for internal commands
@@ -91,7 +93,7 @@ pub struct Call {
     pub arguments: Vec<Argument>,
     /// this field is used by the parser to pass additional command-specific information
     pub parser_info: HashMap<String, Expression>,
-    pub attr_block: Option<Expression>,
+    pub attr_block: Option<AttributeBlock>,
 }
 
 impl Call {

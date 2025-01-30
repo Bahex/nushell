@@ -9,7 +9,7 @@ use log::trace;
 use nu_path::canonicalize_with;
 use nu_protocol::{
     ast::{
-        Argument, Block, Call, Expr, Expression, ImportPattern, ImportPatternHead,
+        Argument, AttributeBlock, Block, Call, Expr, Expression, ImportPattern, ImportPatternHead,
         ImportPatternMember, Pipeline, PipelineElement,
     },
     engine::{StateWorkingSet, DEFAULT_OVERLAY_NAME},
@@ -379,39 +379,35 @@ pub fn parse_def(
     let mut has_env_attribute = false;
     let mut has_wrapped_attribute = false;
 
-    let mut block = Block::new_with_capacity(lite_command.attributes.len());
-    if !lite_command.attributes.is_empty() {
-        block.span = Some(Span::merge_many(
-            lite_command
-                .attributes
-                .iter()
-                .flat_map(|attr| &attr.parts)
-                .copied(),
-        ));
-    }
+    let mut attribute_block = AttributeBlock::new();
 
     for lite_command in &lite_command.attributes {
-        let (expr, name) = match parse_attribute(working_set, lite_command) {
+        let (attr, name) = match parse_attribute(working_set, lite_command) {
             Ok(val) => val,
-            Err(expr) => {
-                block.pipelines.push(Pipeline::from_vec(vec![expr]));
+            Err(attr) => {
+                attribute_block.elements.push(attr);
                 continue;
             }
         };
 
-        let expr_span = expr.span;
-
         let name = name.strip_prefix("attr ").unwrap_or(&name);
-        let value = match eval_constant(working_set, &expr) {
+
+        let expr_span = attr.expr.span;
+        let value = eval_constant(working_set, &attr.expr);
+
+        attribute_block.span = Some(match attribute_block.span {
+            Some(s) => s.append(attr.span()),
+            None => attr.span(),
+        });
+        attribute_block.elements.push(attr);
+
+        let value = match value {
             Ok(val) => val,
             Err(e) => {
                 working_set.error(e.wrap(working_set, expr_span));
-                block.pipelines.push(Pipeline::from_vec(vec![expr]));
                 continue;
             }
         };
-
-        block.pipelines.push(Pipeline::from_vec(vec![expr]));
 
         match name {
             "env" => {
@@ -453,21 +449,6 @@ pub fn parse_def(
             }
         }
     }
-
-    let attr_block = if !block.pipelines.is_empty() {
-        let block_span = block
-            .span
-            .expect("Non empty pipelines means a span must exist");
-        let block_id = working_set.add_block(Arc::new(block));
-        Some(Expression::new(
-            working_set,
-            Expr::Block(block_id),
-            block_span,
-            Type::Nothing,
-        ))
-    } else {
-        None
-    };
 
     // Checking that the function is used with the correct name
     // Maybe this is not necessary but it is a sanity check
@@ -537,7 +518,13 @@ pub fn parse_def(
                 rest_spans,
                 decl_id,
             );
-            call.attr_block = attr_block;
+
+            call.attr_block = if !attribute_block.elements.is_empty() {
+                Some(attribute_block)
+            } else {
+                None
+            };
+
             // This is to preserve the order of the errors so that
             // the check errors below come first
             let mut new_errors = working_set.parse_errors[starting_error_count..].to_vec();
@@ -763,36 +750,35 @@ pub fn parse_extern(
     let mut examples = vec![];
     let mut search_terms: Vec<String> = vec![];
 
-    let mut block = Block::new_with_capacity(lite_command.attributes.len());
-    if !lite_command.attributes.is_empty() {
-        block.span = Some(Span::merge_many(
-            lite_command
-                .attributes
-                .iter()
-                .flat_map(|attr| &attr.parts)
-                .copied(),
-        ));
-    }
+    let mut attribute_block = AttributeBlock::new();
 
     for lite_command in &lite_command.attributes {
-        let (expr, name) = match parse_attribute(working_set, lite_command) {
+        let (attr, name) = match parse_attribute(working_set, lite_command) {
             Ok(val) => val,
-            Err(expr) => {
-                block.pipelines.push(Pipeline::from_vec(vec![expr]));
+            Err(attr) => {
+                attribute_block.elements.push(attr);
                 continue;
             }
         };
 
         let name = name.strip_prefix("attr ").unwrap_or(&name);
-        let value = match eval_constant(working_set, &expr) {
+
+        let expr_span = attr.expr.span;
+        let value = eval_constant(working_set, &attr.expr);
+
+        attribute_block.span = Some(match attribute_block.span {
+            Some(s) => s.append(attr.span()),
+            None => attr.span(),
+        });
+        attribute_block.elements.push(attr);
+
+        let value = match value {
             Ok(val) => val,
-            Err(_) => {
-                block.pipelines.push(Pipeline::from_vec(vec![expr]));
+            Err(e) => {
+                working_set.error(e.wrap(working_set, expr_span));
                 continue;
             }
         };
-
-        block.pipelines.push(Pipeline::from_vec(vec![expr]));
 
         match name {
             "example" => {
@@ -815,21 +801,6 @@ pub fn parse_extern(
             }
         }
     }
-
-    let attr_block = if !block.pipelines.is_empty() {
-        let block_span = block
-            .span
-            .expect("Non empty pipelines means a span must exist");
-        let block_id = working_set.add_block(Arc::new(block));
-        Some(Expression::new(
-            working_set,
-            Expr::Block(block_id),
-            block_span,
-            Type::Nothing,
-        ))
-    } else {
-        None
-    };
 
     // Checking that the function is used with the correct name
     // Maybe this is not necessary but it is a sanity check
@@ -888,7 +859,11 @@ pub fn parse_extern(
                 decl_id,
             );
 
-            call.attr_block = attr_block;
+            call.attr_block = if !attribute_block.elements.is_empty() {
+                Some(attribute_block)
+            } else {
+                None
+            };
 
             working_set.exit_scope();
 

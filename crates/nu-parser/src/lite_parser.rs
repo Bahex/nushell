@@ -481,6 +481,8 @@ pub fn lite_parse(tokens: &[Token]) -> (LiteBlock, Option<ParseError>) {
                                 || last_token == TokenContents::Semicolon
                             {
                                 mode = Mode::Attribute;
+                                // HACK: protocol misuse, storing span of @ as if it was a pipe
+                                attribute.pipe = Some(token.span);
                             } else {
                                 // If `@` is not the first token in a statement then it has no
                                 // special meaning and should be treated the same as

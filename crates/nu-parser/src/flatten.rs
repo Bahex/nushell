@@ -264,7 +264,10 @@ fn flatten_expression_into(
             let decl = working_set.get_decl(call.decl_id);
 
             if let Some(attr_block) = &call.attr_block {
-                flatten_expression_into(working_set, attr_block, output);
+                for attr in &attr_block.elements {
+                    output.push((attr.operator, FlatShape::Pipe));
+                    flatten_expression_into(working_set, &attr.expr, output);
+                }
             }
 
             if call.head.end != 0 {
