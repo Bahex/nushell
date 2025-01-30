@@ -236,9 +236,7 @@ pub fn lite_parse(tokens: &[Token]) -> (LiteBlock, Option<ParseError>) {
                             curr_comment = None;
                             if let Some(curr_attrs_inner) = &curr_attrs {
                                 // TODO: Add a more appropriate ParseError variant
-                                error = error.or(Some(ParseError::KeywordMissingArgument(
-                                    "command call".into(),
-                                    "attribute".into(),
+                                error = error.or(Some(ParseError::AttributeRequiresDefinition(
                                     Span::merge_many(
                                         curr_attrs_inner
                                             .last()
@@ -324,19 +322,16 @@ pub fn lite_parse(tokens: &[Token]) -> (LiteBlock, Option<ParseError>) {
                                 // Clear out the comment as we're entering a new comment
                                 curr_comment = None;
                                 if let Some(curr_attrs_inner) = &curr_attrs {
-                                    // TODO: Add a more appropriate ParseError variant
-                                    error = error.or(Some(ParseError::KeywordMissingArgument(
-                                        "command call".into(),
-                                        "attribute".into(),
-                                        Span::merge_many(
+                                    error = error.or(Some(
+                                        ParseError::AttributeRequiresDefinition(Span::merge_many(
                                             curr_attrs_inner
                                                 .last()
                                                 .expect("no attributes present in attribute block")
                                                 .parts
                                                 .iter()
                                                 .copied(),
-                                        ),
-                                    )));
+                                        )),
+                                    ));
                                     curr_attrs = None;
                                 }
                             } else {
@@ -572,18 +567,16 @@ pub fn lite_parse(tokens: &[Token]) -> (LiteBlock, Option<ParseError>) {
                                 curr_comment = None;
                                 if let Some(curr_attrs_inner) = &curr_attrs {
                                     // TODO: Add a more appropriate ParseError variant
-                                    error = error.or(Some(ParseError::KeywordMissingArgument(
-                                        "command call".into(),
-                                        "attribute".into(),
-                                        Span::merge_many(
+                                    error = error.or(Some(
+                                        ParseError::AttributeRequiresDefinition(Span::merge_many(
                                             curr_attrs_inner
                                                 .last()
                                                 .expect("no attributes present in attribute block")
                                                 .parts
                                                 .iter()
                                                 .copied(),
-                                        ),
-                                    )));
+                                        )),
+                                    ));
                                     curr_attrs = None;
                                 }
                             } else if let Some(curr_attrs) = curr_attrs.take() {
@@ -622,9 +615,7 @@ pub fn lite_parse(tokens: &[Token]) -> (LiteBlock, Option<ParseError>) {
             .push(mem::take(&mut attribute));
     }
     if let Some(curr_attrs_inner) = curr_attrs {
-        error = error.or(Some(ParseError::KeywordMissingArgument(
-            "command call".into(),
-            "attribute".into(),
+        error = error.or(Some(ParseError::AttributeRequiresDefinition(
             Span::merge_many(
                 curr_attrs_inner
                     .last()

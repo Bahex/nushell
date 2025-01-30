@@ -373,7 +373,6 @@ pub fn parse_def(
 
     let (desc, extra_desc) = working_set.build_desc(&lite_command.comments);
 
-    // TODO: Add sensible errors for theses
     let mut attributes = vec![];
     let mut examples = vec![];
     let mut search_terms: Vec<String> = vec![];
