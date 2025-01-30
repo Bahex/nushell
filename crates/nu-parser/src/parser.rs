@@ -5782,6 +5782,18 @@ pub fn parse_builtin_commands(
     trace!("parsing: checking for keywords");
     let name = working_set.get_span_contents(lite_command.parts[0]);
 
+    if let Some(attr) = lite_command.attributes.last() {
+        match name {
+            b"def" | b"extern" | b"export" => {}
+            _ => {
+                working_set.error(ParseError::AttributeRequiresDefinition(Span::concat(
+                    &attr.parts,
+                )));
+                return garbage_pipeline(working_set, &lite_command.parts);
+            }
+        }
+    }
+
     match name {
         b"def" => parse_def(working_set, lite_command, None).0,
         b"extern" => parse_extern(working_set, lite_command, None),
