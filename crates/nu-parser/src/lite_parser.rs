@@ -616,6 +616,26 @@ pub fn lite_parse(tokens: &[Token]) -> (LiteBlock, Option<ParseError>) {
         last_token = token.contents;
     }
 
+    if !attribute.parts.is_empty() {
+        curr_attrs
+            .get_or_insert_with(Default::default)
+            .push(mem::take(&mut attribute));
+    }
+    if let Some(curr_attrs_inner) = curr_attrs {
+        error = error.or(Some(ParseError::KeywordMissingArgument(
+            "command call".into(),
+            "attribute".into(),
+            Span::merge_many(
+                curr_attrs_inner
+                    .last()
+                    .expect("no attributes present in attribute block")
+                    .parts
+                    .iter()
+                    .copied(),
+            ),
+        )));
+    }
+
     if let Some((_, _, span)) = file_redirection {
         command.push(span);
         error = error.or(Some(ParseError::Expected("redirection target", span)));
