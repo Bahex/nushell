@@ -55,7 +55,10 @@ impl Command for AttrExample {
         let result: Option<Value> = call.get_flag(engine_state, stack, "result")?;
         let example = call
             .positional_nth(stack, 1)
-            .expect("checked through parser");
+            .ok_or(ShellError::MissingParameter {
+                param_name: "example".into(),
+                span: call.head,
+            })?;
 
         let example_content = match example.as_block() {
             Some(block_id) => {
@@ -94,10 +97,13 @@ impl Command for AttrExample {
     ) -> Result<PipelineData, ShellError> {
         let description: Spanned<String> = call.req_const(working_set, 0)?;
         let result: Option<Value> = call.get_flag_const(working_set, "result")?;
-        let example_expr = call
-            .assert_ast_call()?
-            .positional_nth(1)
-            .expect("checked through parser");
+        let example_expr =
+            call.assert_ast_call()?
+                .positional_nth(1)
+                .ok_or(ShellError::MissingParameter {
+                    param_name: "example".into(),
+                    span: call.head,
+                })?;
 
         let example_content = match example_expr.as_block() {
             Some(block_id) => {
