@@ -17,15 +17,15 @@ impl Attribute {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AttributeBlock {
     pub span: Option<Span>,
-    pub elements: Vec<Attribute>,
+    pub attributes: Vec<Attribute>,
 }
 
 #[allow(clippy::new_without_default)]
 impl AttributeBlock {
     pub fn new() -> Self {
         Self {
-            elements: vec![],
             span: None,
+            attributes: vec![],
         }
     }
 }

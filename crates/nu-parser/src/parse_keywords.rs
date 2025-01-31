@@ -385,7 +385,7 @@ pub fn parse_def(
         let (attr, name) = match parse_attribute(working_set, lite_command) {
             Ok(val) => val,
             Err(attr) => {
-                attribute_block.elements.push(attr);
+                attribute_block.attributes.push(attr);
                 continue;
             }
         };
@@ -395,7 +395,7 @@ pub fn parse_def(
         let expr_span = attr.expr.span;
         let value = eval_constant(working_set, &attr.expr);
 
-        attribute_block.elements.push(attr);
+        attribute_block.attributes.push(attr);
 
         let value = match value {
             Ok(val) => val,
@@ -746,7 +746,7 @@ pub fn parse_extern(
         let (attr, name) = match parse_attribute(working_set, lite_command) {
             Ok(val) => val,
             Err(attr) => {
-                attribute_block.elements.push(attr);
+                attribute_block.attributes.push(attr);
                 continue;
             }
         };
@@ -756,7 +756,7 @@ pub fn parse_extern(
         let expr_span = attr.expr.span;
         let value = eval_constant(working_set, &attr.expr);
 
-        attribute_block.elements.push(attr);
+        attribute_block.attributes.push(attr);
 
         let value = match value {
             Ok(val) => val,
