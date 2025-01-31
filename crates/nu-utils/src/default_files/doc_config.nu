@@ -663,6 +663,9 @@ $env.config.color_config.shape_matching_brackets
 # shape_pipe: The pipe `|` when used to separate expressions in a pipeline
 $env.config.color_config.shape_pipe
 
+# shape_attribute: Marks custom command attributes
+$env.config.color_config.shape_attribute
+
 # shape_internalcall: A known Nushell built-in or custom command in the "command position" (usually
 # the first bare word of an expression).
 $env.config.color_config.shape_internalcall

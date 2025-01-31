@@ -36,6 +36,7 @@ pub enum FlatShape {
     Nothing,
     Operator,
     Pipe,
+    Attribute,
     Range,
     RawString,
     Record,
@@ -76,6 +77,7 @@ impl FlatShape {
             FlatShape::Nothing => "shape_nothing",
             FlatShape::Operator => "shape_operator",
             FlatShape::Pipe => "shape_pipe",
+            FlatShape::Attribute => "shape_attribute",
             FlatShape::Range => "shape_range",
             FlatShape::RawString => "shape_raw_string",
             FlatShape::Record => "shape_record",
@@ -265,7 +267,7 @@ fn flatten_expression_into(
 
             if let Some(attr_block) = &call.attr_block {
                 for attr in &attr_block.elements {
-                    output.push((attr.operator, FlatShape::Pipe));
+                    output.push((attr.operator, FlatShape::Attribute));
                     flatten_expression_into(working_set, &attr.expr, output);
                 }
             }
