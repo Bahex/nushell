@@ -64,7 +64,6 @@ impl<T: Completer> Completer for CustomCompletion<T> {
                     )),
                 ],
                 parser_info: HashMap::new(),
-                attr_block: None,
             },
             PipelineData::empty(),
         );

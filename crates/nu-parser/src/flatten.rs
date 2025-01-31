@@ -265,13 +265,6 @@ fn flatten_expression_into(
         Expr::Call(call) => {
             let decl = working_set.get_decl(call.decl_id);
 
-            if let Some(attr_block) = &call.attr_block {
-                for attr in &attr_block.elements {
-                    output.push((attr.operator, FlatShape::Attribute));
-                    flatten_expression_into(working_set, &attr.expr, output);
-                }
-            }
-
             if call.head.end != 0 {
                 // Make sure we don't push synthetic calls
                 output.push((call.head, FlatShape::InternalCall(call.decl_id)));

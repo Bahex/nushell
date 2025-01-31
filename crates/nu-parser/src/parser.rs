@@ -5749,7 +5749,6 @@ pub fn parse_expression(working_set: &mut StateWorkingSet, spans: &[Span]) -> Ex
                 decl_id,
                 arguments,
                 parser_info: HashMap::new(),
-                attr_block: None,
             }));
 
             Expression::new(working_set, expr, Span::concat(spans), ty)

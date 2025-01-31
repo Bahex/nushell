@@ -395,10 +395,6 @@ pub fn parse_def(
         let expr_span = attr.expr.span;
         let value = eval_constant(working_set, &attr.expr);
 
-        attribute_block.span = Some(match attribute_block.span {
-            Some(s) => s.append(attr.span()),
-            None => attr.span(),
-        });
         attribute_block.elements.push(attr);
 
         let value = match value {
@@ -518,12 +514,6 @@ pub fn parse_def(
                 rest_spans,
                 decl_id,
             );
-
-            call.attr_block = if !attribute_block.elements.is_empty() {
-                Some(attribute_block)
-            } else {
-                None
-            };
 
             // This is to preserve the order of the errors so that
             // the check errors below come first
@@ -766,10 +756,6 @@ pub fn parse_extern(
         let expr_span = attr.expr.span;
         let value = eval_constant(working_set, &attr.expr);
 
-        attribute_block.span = Some(match attribute_block.span {
-            Some(s) => s.append(attr.span()),
-            None => attr.span(),
-        });
         attribute_block.elements.push(attr);
 
         let value = match value {
@@ -858,12 +844,6 @@ pub fn parse_extern(
                 rest_spans,
                 decl_id,
             );
-
-            call.attr_block = if !attribute_block.elements.is_empty() {
-                Some(attribute_block)
-            } else {
-                None
-            };
 
             working_set.exit_scope();
 
@@ -1421,7 +1401,6 @@ pub fn parse_export_in_module(
         decl_id: export_decl_id,
         arguments: vec![],
         parser_info: HashMap::new(),
-        attr_block: None,
     });
 
     let exportables = if let Some(kw_span) = spans.get(1) {
@@ -2438,7 +2417,6 @@ pub fn parse_module(
             Argument::Positional(block_expr),
         ],
         parser_info: HashMap::new(),
-        attr_block: None,
     });
 
     (
@@ -3325,7 +3303,6 @@ pub fn parse_let(working_set: &mut StateWorkingSet, spans: &[Span]) -> Pipeline 
                         head: spans[0],
                         arguments: vec![Argument::Positional(lvalue), Argument::Positional(rvalue)],
                         parser_info: HashMap::new(),
-                        attr_block: None,
                     });
 
                     return Pipeline::from_vec(vec![Expression::new(
@@ -3484,7 +3461,6 @@ pub fn parse_const(working_set: &mut StateWorkingSet, spans: &[Span]) -> (Pipeli
                             Argument::Positional(rvalue),
                         ],
                         parser_info: HashMap::new(),
-                        attr_block: None,
                     });
 
                     return (
@@ -3610,7 +3586,6 @@ pub fn parse_mut(working_set: &mut StateWorkingSet, spans: &[Span]) -> Pipeline 
                         head: spans[0],
                         arguments: vec![Argument::Positional(lvalue), Argument::Positional(rvalue)],
                         parser_info: HashMap::new(),
-                        attr_block: None,
                     });
 
                     return Pipeline::from_vec(vec![Expression::new(
