@@ -495,6 +495,7 @@ fn parse_def_inner(
 
     let mut attribute_vals = vec![];
     let mut examples = vec![];
+    let mut search_terms = vec![];
     let mut has_env_attribute = false;
     let mut has_wrapped_attribute = false;
 
@@ -530,6 +531,21 @@ fn parse_def_inner(
                         msg: "Value couldn't be converted to an example".into(),
                         span: Some(expr_span),
                         help: Some("Is `attr example` shadowed?".into()),
+                        inner: vec![],
+                    };
+                    working_set.error(e.wrap(working_set, expr_span));
+                }
+            },
+            "search-terms" => match <Vec<String>>::from_value(value) {
+                Ok(mut terms) => {
+                    search_terms.append(&mut terms);
+                }
+                Err(_) => {
+                    let e = ShellError::GenericError {
+                        error: "nu::shell::invalid_search_terms".into(),
+                        msg: "Value couldn't be converted to search-terms".into(),
+                        span: Some(expr_span),
+                        help: Some("Is `attr search-terms` shadowed?".into()),
                         inner: vec![],
                     };
                     working_set.error(e.wrap(working_set, expr_span));
@@ -754,9 +770,12 @@ fn parse_def_inner(
             signature.extra_description = extra_desc;
             signature.allows_unknown_args = has_wrapped;
 
-            *declaration = signature
-                .clone()
-                .into_block_command(block_id, attribute_vals, examples);
+            *declaration = signature.clone().into_block_command(
+                block_id,
+                attribute_vals,
+                examples,
+                search_terms,
+            );
 
             let block = working_set.get_block_mut(block_id);
             block.signature = signature;
@@ -817,6 +836,7 @@ fn parse_extern_inner(
 
     let mut attribute_vals = vec![];
     let mut examples = vec![];
+    let mut search_terms = vec![];
 
     for (attr, name) in attributes {
         let Some(name) = name else {
@@ -844,6 +864,21 @@ fn parse_extern_inner(
                         msg: "Value couldn't be converted to an example".into(),
                         span: Some(expr_span),
                         help: Some("Is `attr example` shadowed?".into()),
+                        inner: vec![],
+                    };
+                    working_set.error(e.wrap(working_set, expr_span));
+                }
+            },
+            "search-terms" => match <Vec<String>>::from_value(value) {
+                Ok(mut terms) => {
+                    search_terms.append(&mut terms);
+                }
+                Err(_) => {
+                    let e = ShellError::GenericError {
+                        error: "nu::shell::invalid_search_terms".into(),
+                        msg: "Value couldn't be converted to search-terms".into(),
+                        span: Some(expr_span),
+                        help: Some("Is `attr search-terms` shadowed?".into()),
                         inner: vec![],
                     };
                     working_set.error(e.wrap(working_set, expr_span));
@@ -968,6 +1003,7 @@ fn parse_extern_inner(
                             block_id,
                             attribute_vals,
                             examples,
+                            search_terms,
                         );
 
                         working_set.get_block_mut(block_id).signature = signature;
@@ -991,6 +1027,7 @@ fn parse_extern_inner(
                         signature,
                         attributes: attribute_vals,
                         examples,
+                        search_terms,
                     };
 
                     *declaration = Box::new(decl);

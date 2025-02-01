@@ -12,6 +12,7 @@ pub struct KnownExternal {
     pub signature: Box<Signature>,
     pub attributes: Vec<(String, Value)>,
     pub examples: Vec<CustomExample>,
+    pub search_terms: Vec<String>,
 }
 
 impl Command for KnownExternal {
@@ -85,11 +86,15 @@ impl Command for KnownExternal {
         self.attributes.clone()
     }
 
-   fn examples(&self) -> Vec<Example> {
+    fn examples(&self) -> Vec<Example> {
         self.examples
             .iter()
             .map(CustomExample::to_example)
             .collect()
+    }
+
+    fn search_terms(&self) -> Vec<&str> {
+        self.search_terms.iter().map(String::as_str).collect()
     }
 }
 
