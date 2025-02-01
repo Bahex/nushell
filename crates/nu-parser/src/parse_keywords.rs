@@ -1,7 +1,7 @@
 use crate::{
     exportable::Exportable,
     parse_block,
-    parser::{parse_redirection, redirecting_builtin_error},
+    parser::{parse_attribute, parse_redirection, redirecting_builtin_error},
     type_check::{check_block_input_output, type_compatible},
 };
 use itertools::Itertools;
@@ -9,8 +9,8 @@ use log::trace;
 use nu_path::canonicalize_with;
 use nu_protocol::{
     ast::{
-        Argument, Block, Call, Expr, Expression, ImportPattern, ImportPatternHead,
-        ImportPatternMember, Pipeline, PipelineElement,
+        Argument, Attribute, AttributeBlock, Block, Call, Expr, Expression, ImportPattern,
+        ImportPatternHead, ImportPatternMember, Pipeline, PipelineElement,
     },
     engine::{StateWorkingSet, DEFAULT_OVERLAY_NAME},
     eval_const::eval_constant,
@@ -396,7 +396,48 @@ pub fn parse_attribute_block(
             _ => command.push(span),
         }
     }
-    todo!()
+
+    let attributes = attributes
+        .iter()
+        .map(|cmd| parse_attribute(working_set, cmd))
+        .collect::<Vec<_>>();
+
+    let (expr, decl) = if !command.parts.is_empty() {
+        parse_def_inner(working_set, &attributes, &command, module_name)
+    } else {
+        (
+            garbage(
+                working_set,
+                attributes
+                    .last()
+                    .expect("Attribute block must contain at least one attribute")
+                    .0
+                    .expr
+                    .span
+                    .past(),
+            ),
+            None,
+        )
+    };
+
+    let ty = expr.ty.clone();
+
+    let span = Span::merge_many(attributes.iter().map(|x| x.0.expr.span).chain([expr.span]));
+
+    let attr_block = AttributeBlock {
+        attributes: attributes.into_iter().map(|x| x.0).collect(),
+        item: Box::new(expr),
+    };
+
+    (
+        Pipeline::from_vec(vec![Expression::new(
+            working_set,
+            Expr::AttributeBlock(attr_block),
+            span,
+            ty,
+        )]),
+        decl,
+    )
 }
 
 // Returns also the parsed command name and ID

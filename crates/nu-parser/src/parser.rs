@@ -1440,6 +1440,84 @@ fn find_longest_decl(
     (cmd_start, pos, name, maybe_decl_id)
 }
 
+pub fn parse_attribute(
+    working_set: &mut StateWorkingSet,
+    lite_command: &LiteCommand,
+) -> (Attribute, Option<String>) {
+    let operator_span = lite_command
+        .parts
+        .first()
+        .copied()
+        .filter(|p| working_set.get_span_contents(*p) == b"@")
+        .expect("Attributes always start with the attribute operator.");
+    let spans = &lite_command.parts[1..];
+
+    let (cmd_start, cmd_end, name, decl_id) = find_longest_decl(working_set, spans, b"attr");
+    let name_span = Span::concat(&spans[cmd_start..cmd_end]);
+
+    let Ok(name) = String::from_utf8(name) else {
+        working_set.error(ParseError::NonUtf8(name_span));
+        return (
+            Attribute {
+                operator: operator_span,
+                expr: garbage(working_set, Span::concat(spans)),
+            },
+            None,
+        );
+    };
+
+    let Some(decl_id) = decl_id else {
+        working_set.error(ParseError::UnknownCommand(name_span));
+        return (
+            Attribute {
+                operator: operator_span,
+                expr: garbage(working_set, Span::concat(spans)),
+            },
+            None,
+        );
+    };
+
+    let decl = working_set.get_decl(decl_id);
+
+    let parsed_call = match decl.as_alias() {
+        Some(alias) => match &alias.clone().wrapped_call {
+            Expression {
+                expr: Expr::ExternalCall(..),
+                ..
+            } => {
+                return (
+                    Attribute {
+                        operator: operator_span,
+                        expr: garbage(working_set, Span::concat(spans)),
+                    },
+                    None,
+                )
+            }
+            _ => {
+                trace!("parsing: alias of internal call");
+                parse_internal_call(working_set, name_span, &spans[cmd_end..], decl_id)
+            }
+        },
+        None => {
+            trace!("parsing: internal call");
+            parse_internal_call(working_set, name_span, &spans[cmd_end..], decl_id)
+        }
+    };
+
+    (
+        Attribute {
+            operator: operator_span,
+            expr: Expression::new(
+                working_set,
+                Expr::Call(parsed_call.call),
+                Span::concat(spans),
+                parsed_call.output,
+            ),
+        },
+        Some(name),
+    )
+}
+
 pub fn parse_binary(working_set: &mut StateWorkingSet, span: Span) -> Expression {
     trace!("parsing: binary");
     let contents = working_set.get_span_contents(span);
