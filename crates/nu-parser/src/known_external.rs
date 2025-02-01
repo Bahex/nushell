@@ -3,6 +3,7 @@ use nu_protocol::{
     ast::{self, Expr, Expression},
     engine::{self, CallImpl, CommandType, UNKNOWN_SPAN_ID},
     ir::{self, DataSlice},
+    CustomExample,
 };
 
 #[derive(Clone)]
@@ -10,6 +11,7 @@ pub struct KnownExternal {
     pub name: String,
     pub signature: Box<Signature>,
     pub attributes: Vec<(String, Value)>,
+    pub examples: Vec<CustomExample>,
 }
 
 impl Command for KnownExternal {
@@ -81,6 +83,13 @@ impl Command for KnownExternal {
 
     fn attributes(&self) -> Vec<(String, Value)> {
         self.attributes.clone()
+    }
+
+   fn examples(&self) -> Vec<Example> {
+        self.examples
+            .iter()
+            .map(CustomExample::to_example)
+            .collect()
     }
 }
 

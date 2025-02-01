@@ -15,8 +15,8 @@ use nu_protocol::{
     engine::{StateWorkingSet, DEFAULT_OVERLAY_NAME},
     eval_const::eval_constant,
     parser_path::ParserPath,
-    Alias, BlockId, DeclId, Module, ModuleId, ParseError, PositionalArg, ResolvedImportPattern,
-    Span, Spanned, SyntaxShape, Type, Value, VarId,
+    Alias, BlockId, CustomExample, DeclId, FromValue, Module, ModuleId, ParseError, PositionalArg,
+    ResolvedImportPattern, ShellError, Span, Spanned, SyntaxShape, Type, Value, VarId,
 };
 use std::{
     collections::{HashMap, HashSet},
@@ -479,7 +479,9 @@ fn parse_def_inner(
     let concat_span = Span::concat(spans);
 
     let (desc, extra_desc) = working_set.build_desc(&lite_command.comments);
+
     let mut attribute_vals = vec![];
+    let mut examples = vec![];
 
     for (attr, name) in attributes {
         let Some(name) = name else {
@@ -499,6 +501,19 @@ fn parse_def_inner(
         };
 
         match name {
+            "example" => match CustomExample::from_value(value) {
+                Ok(example) => examples.push(example),
+                Err(_) => {
+                    let e = ShellError::GenericError {
+                        error: "nu::shell::invalid_example".into(),
+                        msg: "Value couldn't be converted to an example".into(),
+                        span: Some(expr_span),
+                        help: Some("Is `attr example` shadowed?".into()),
+                        inner: vec![],
+                    };
+                    working_set.error(e.wrap(working_set, expr_span));
+                }
+            },
             _ => {
                 attribute_vals.push((name.to_string(), value));
             }
@@ -717,7 +732,7 @@ fn parse_def_inner(
 
             *declaration = signature
                 .clone()
-                .into_block_command(block_id, attribute_vals);
+                .into_block_command(block_id, attribute_vals, examples);
 
             let block = working_set.get_block_mut(block_id);
             block.signature = signature;
@@ -775,7 +790,9 @@ fn parse_extern_inner(
     let concat_span = Span::concat(spans);
 
     let (description, extra_description) = working_set.build_desc(&lite_command.comments);
+
     let mut attribute_vals = vec![];
+    let mut examples = vec![];
 
     for (attr, name) in attributes {
         let Some(name) = name else {
@@ -795,6 +812,19 @@ fn parse_extern_inner(
         };
 
         match name {
+            "example" => match CustomExample::from_value(value) {
+                Ok(example) => examples.push(example),
+                Err(_) => {
+                    let e = ShellError::GenericError {
+                        error: "nu::shell::invalid_example".into(),
+                        msg: "Value couldn't be converted to an example".into(),
+                        span: Some(expr_span),
+                        help: Some("Is `attr example` shadowed?".into()),
+                        inner: vec![],
+                    };
+                    working_set.error(e.wrap(working_set, expr_span));
+                }
+            },
             _ => {
                 attribute_vals.push((name.to_string(), value));
             }
@@ -910,9 +940,11 @@ fn parse_extern_inner(
                             name_expr.span,
                         ));
                     } else {
-                        *declaration = signature
-                            .clone()
-                            .into_block_command(block_id, attribute_vals);
+                        *declaration = signature.clone().into_block_command(
+                            block_id,
+                            attribute_vals,
+                            examples,
+                        );
 
                         working_set.get_block_mut(block_id).signature = signature;
                     }
@@ -934,6 +966,7 @@ fn parse_extern_inner(
                         name: external_name,
                         signature,
                         attributes: attribute_vals,
+                        examples,
                     };
 
                     *declaration = Box::new(decl);
