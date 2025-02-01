@@ -495,6 +495,8 @@ fn parse_def_inner(
 
     let mut attribute_vals = vec![];
     let mut examples = vec![];
+    let mut has_env_attribute = false;
+    let mut has_wrapped_attribute = false;
 
     for (attr, name) in attributes {
         let Some(name) = name else {
@@ -514,6 +516,12 @@ fn parse_def_inner(
         };
 
         match name {
+            "env" => {
+                has_env_attribute = true;
+            }
+            "wrapped" => {
+                has_wrapped_attribute = true;
+            }
             "example" => match CustomExample::from_value(value) {
                 Ok(example) => examples.push(example),
                 Err(_) => {
@@ -648,12 +656,15 @@ fn parse_def_inner(
         }
     };
 
-    let Ok(has_env) = has_flag_const(working_set, &call, "env") else {
+    let Ok(has_env_switch) = has_flag_const(working_set, &call, "env") else {
         return (garbage(working_set, concat_span), None);
     };
-    let Ok(has_wrapped) = has_flag_const(working_set, &call, "wrapped") else {
+    let Ok(has_wrapped_switch) = has_flag_const(working_set, &call, "wrapped") else {
         return (garbage(working_set, concat_span), None);
     };
+
+    let has_env = has_env_switch || has_env_attribute;
+    let has_wrapped = has_wrapped_switch || has_wrapped_attribute;
 
     // All positional arguments must be in the call positional vector by this point
     let name_expr = call.positional_nth(0).expect("def call already checked");

@@ -16,7 +16,9 @@ pub fn create_default_context() -> EngineState {
         // Core
         bind_command! {
             Alias,
+            AttrEnv,
             AttrExample,
+            AttrWrapped,
             Break,
             Collect,
             Const,
