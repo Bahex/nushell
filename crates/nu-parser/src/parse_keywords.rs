@@ -476,6 +476,7 @@ fn parse_def_inner(
     module_name: Option<&[u8]>,
 ) -> (Expression, Option<(Vec<u8>, DeclId)>) {
     let spans = &lite_command.parts[..];
+    let concat_span = Span::concat(spans);
 
     let (desc, extra_desc) = working_set.build_desc(&lite_command.comments);
 
@@ -496,11 +497,11 @@ fn parse_def_inner(
             "internal error: Wrong call name for def function".into(),
             Span::concat(spans),
         ));
-        return (garbage(working_set, Span::concat(spans)), None);
+        return (garbage(working_set, concat_span), None);
     }
     if let Some(redirection) = lite_command.redirection.as_ref() {
         working_set.error(redirecting_builtin_error("def", redirection));
-        return (garbage(working_set, Span::concat(spans)), None);
+        return (garbage(working_set, concat_span), None);
     }
 
     // Parsing the spans and checking that they match the register signature
@@ -512,7 +513,7 @@ fn parse_def_inner(
                 "internal error: def declaration not found".into(),
                 Span::concat(spans),
             ));
-            return (garbage(working_set, Span::concat(spans)), None);
+            return (garbage(working_set, concat_span), None);
         }
         Some(decl_id) => {
             working_set.enter_scope();
@@ -536,7 +537,7 @@ fn parse_def_inner(
                     String::from_utf8_lossy(&def_call).as_ref(),
                 ) {
                     working_set.error(err);
-                    return (garbage(working_set, Span::concat(spans)), None);
+                    return (garbage(working_set, concat_span), None);
                 }
             }
 
@@ -580,7 +581,7 @@ fn parse_def_inner(
             working_set.parse_errors.append(&mut new_errors);
 
             let Ok(is_help) = has_flag_const(working_set, &call, "help") else {
-                return (garbage(working_set, Span::concat(spans)), None);
+                return (garbage(working_set, concat_span), None);
             };
 
             if starting_error_count != working_set.parse_errors.len() || is_help {
@@ -595,10 +596,10 @@ fn parse_def_inner(
     };
 
     let Ok(has_env) = has_flag_const(working_set, &call, "env") else {
-        return (garbage(working_set, Span::concat(spans)), None);
+        return (garbage(working_set, concat_span), None);
     };
     let Ok(has_wrapped) = has_flag_const(working_set, &call, "wrapped") else {
-        return (garbage(working_set, Span::concat(spans)), None);
+        return (garbage(working_set, concat_span), None);
     };
 
     // All positional arguments must be in the call positional vector by this point
@@ -630,7 +631,7 @@ fn parse_def_inner(
             "Could not get string from string expression".into(),
             name_expr.span,
         ));
-        return (garbage(working_set, Span::concat(spans)), None);
+        return (garbage(working_set, concat_span), None);
     };
 
     let mut result = None;
