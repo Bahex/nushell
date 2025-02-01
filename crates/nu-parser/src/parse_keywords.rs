@@ -415,6 +415,8 @@ pub fn parse_attribute_block(
         .map(|cmd| parse_attribute(working_set, cmd))
         .collect::<Vec<_>>();
 
+    command.comments = lite_command.comments.clone();
+
     let (expr, decl) = match command.parts.first_chunk() {
         Some(&[first, second]) => match (
             working_set.get_span_contents(first),
