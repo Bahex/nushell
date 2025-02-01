@@ -394,39 +394,45 @@ pub fn parse_attribute_block(
         .map(|cmd| parse_attribute(working_set, cmd))
         .collect::<Vec<_>>();
 
-    let (expr, decl) = match command.parts.first_chunk() {
-        Some(&[first, second]) => match (
-            working_set.get_span_contents(first),
-            working_set.get_span_contents(second),
-        ) {
-            (b"def", _) | (b"export", b"def") => {
-                parse_def_inner(working_set, &attributes, &command, module_name)
-            }
-            (b"extern", _) | (b"export", b"extern") => (
-                parse_extern_inner(working_set, &attributes, &command, module_name),
-                None,
-            ),
-            _ => todo!(),
-        },
-        None => {
+    let first_word = command
+        .parts
+        .first()
+        .map(|s| working_set.get_span_contents(*s));
+    let second_word = command
+        .parts
+        .get(1)
+        .map(|s| working_set.get_span_contents(*s));
+
+    let (expr, decl) = match (first_word, second_word) {
+        (Some(b"def"), _) | (Some(b"export"), Some(b"def")) => {
+            parse_def_inner(working_set, &attributes, &command, module_name)
+        }
+        (Some(b"extern"), _) | (Some(b"export"), Some(b"extern")) => (
+            parse_extern_inner(working_set, &attributes, &command, module_name),
+            None,
+        ),
+        (Some(_), _) => {
+            let span = Span::concat(&command.parts);
+            // TODO(Bahex): Add a more appropriate error
+            working_set.error(ParseError::InternalError(
+                "Unsupported command".into(),
+                span,
+            ));
+            (garbage(working_set, span), None)
+        }
+        (None, _) => {
+            let span = attributes
+                .last()
+                .expect("Attribute block must contain at least one attribute")
+                .0
+                .expr
+                .span;
             // TODO(Bahex): Add a more appropriate error
             working_set.error(ParseError::ExtraPositional(
                 "Attribute without definition".into(),
-                Span::unknown(),
+                span,
             ));
-            (
-                garbage(
-                    working_set,
-                    attributes
-                        .last()
-                        .expect("Attribute block must contain at least one attribute")
-                        .0
-                        .expr
-                        .span
-                        .past(),
-                ),
-                None,
-            )
+            (garbage(working_set, span.past()), None)
         }
     };
 
