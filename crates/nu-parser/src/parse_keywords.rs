@@ -479,6 +479,31 @@ fn parse_def_inner(
     let concat_span = Span::concat(spans);
 
     let (desc, extra_desc) = working_set.build_desc(&lite_command.comments);
+    let mut attribute_vals = vec![];
+
+    for (attr, name) in attributes {
+        let Some(name) = name else {
+            continue;
+        };
+        let name = name.strip_prefix("attr ").unwrap_or(name);
+
+        let expr_span = attr.expr.span;
+        let value = eval_constant(working_set, &attr.expr);
+
+        let value = match value {
+            Ok(val) => val,
+            Err(e) => {
+                working_set.error(e.wrap(working_set, expr_span));
+                continue;
+            }
+        };
+
+        match name {
+            _ => {
+                attribute_vals.push((name.to_string(), value));
+            }
+        }
+    }
 
     // Checking that the function is used with the correct name
     // Maybe this is not necessary but it is a sanity check
@@ -690,7 +715,9 @@ fn parse_def_inner(
             signature.extra_description = extra_desc;
             signature.allows_unknown_args = has_wrapped;
 
-            *declaration = signature.clone().into_block_command(block_id);
+            *declaration = signature
+                .clone()
+                .into_block_command(block_id, attribute_vals);
 
             let block = working_set.get_block_mut(block_id);
             block.signature = signature;
@@ -748,6 +775,31 @@ fn parse_extern_inner(
     let concat_span = Span::concat(spans);
 
     let (description, extra_description) = working_set.build_desc(&lite_command.comments);
+    let mut attribute_vals = vec![];
+
+    for (attr, name) in attributes {
+        let Some(name) = name else {
+            continue;
+        };
+        let name = name.strip_prefix("attr ").unwrap_or(name);
+
+        let expr_span = attr.expr.span;
+        let value = eval_constant(working_set, &attr.expr);
+
+        let value = match value {
+            Ok(val) => val,
+            Err(e) => {
+                working_set.error(e.wrap(working_set, expr_span));
+                continue;
+            }
+        };
+
+        match name {
+            _ => {
+                attribute_vals.push((name.to_string(), value));
+            }
+        }
+    }
 
     // Checking that the function is used with the correct name
     // Maybe this is not necessary but it is a sanity check
@@ -858,7 +910,9 @@ fn parse_extern_inner(
                             name_expr.span,
                         ));
                     } else {
-                        *declaration = signature.clone().into_block_command(block_id);
+                        *declaration = signature
+                            .clone()
+                            .into_block_command(block_id, attribute_vals);
 
                         working_set.get_block_mut(block_id).signature = signature;
                     }
@@ -878,6 +932,7 @@ fn parse_extern_inner(
                         description,
                         extra_description,
                         signature,
+                        attributes: attribute_vals,
                     };
 
                     *declaration = Box::new(decl);
