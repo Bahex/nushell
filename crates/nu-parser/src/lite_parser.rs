@@ -65,6 +65,7 @@ pub struct LiteCommand {
     pub comments: Vec<Span>,
     pub parts: Vec<Span>,
     pub redirection: Option<LiteRedirection>,
+    pub attribute_idx: Vec<usize>,
 }
 
 impl LiteCommand {
@@ -250,7 +251,7 @@ pub fn lite_parse(tokens: &[Token]) -> (LiteBlock, Option<ParseError>) {
                 match &token.contents {
                     // Consume until semicolon or terminating EOL. Attributes can't contain pipelines or redirections.
                     TokenContents::Eol | TokenContents::Semicolon => {
-                        command.push(token.span);
+                        command.attribute_idx.push(command.parts.len());
                         mode = Mode::Normal;
                         if matches!(last_token, TokenContents::Eol | TokenContents::Semicolon) {
                             // Clear out the comment as we're entering a new comment
@@ -486,6 +487,10 @@ pub fn lite_parse(tokens: &[Token]) -> (LiteBlock, Option<ParseError>) {
     if let Some((_, _, span)) = file_redirection {
         command.push(span);
         error = error.or(Some(ParseError::Expected("redirection target", span)));
+    }
+
+    if let Mode::Attribute = mode {
+        command.attribute_idx.push(command.parts.len());
     }
 
     pipeline.push(&mut command);

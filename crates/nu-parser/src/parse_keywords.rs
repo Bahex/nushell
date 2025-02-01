@@ -145,29 +145,13 @@ pub fn parse_keyword(working_set: &mut StateWorkingSet, lite_command: &LiteComma
     }
 }
 
-pub fn parse_def_predecl(working_set: &mut StateWorkingSet, spans: &[Span]) {
+pub fn parse_def_predecl(working_set: &mut StateWorkingSet, lite_command: &LiteCommand) {
+    // skip attributes if present
+    let attr_offset = lite_command.attribute_idx.last().copied().unwrap_or(0);
+    let spans = &lite_command.parts[attr_offset..];
     let mut pos = 0;
 
     let def_type_name = if spans.len() >= 3 {
-        // skip attributes if present
-        if working_set.get_span_contents(spans[0]) == b"@" {
-            let iife = (|| -> Option<()> {
-                while working_set.get_span_contents(*spans.get(pos)?) == b"@" {
-                    while !matches!(
-                        working_set.get_span_contents(*spans.get(pos)?),
-                        b"\n" | b";"
-                    ) {
-                        pos += 1;
-                    }
-                    pos += 1;
-                }
-                Some(())
-            })();
-            if iife.is_none() {
-                return;
-            }
-        }
-
         // definition can't have only two spans, minimum is 3, e.g., 'extern spam []'
         if working_set.get_span_contents(spans[pos]) == b"export" {
             pos += 2;
@@ -390,7 +374,7 @@ pub fn parse_attribute_block(
 ) -> (Pipeline, Option<(Vec<u8>, DeclId)>) {
     trace!("parsing: attribute_block");
 
-    let (command, attributes) = extract_attributes(working_set, lite_command);
+    let (command, attributes) = extract_attributes(lite_command);
 
     let attributes = attributes
         .iter()
@@ -1441,7 +1425,7 @@ pub fn parse_export_in_module(
     module_name: &[u8],
     parent_module: &mut Module,
 ) -> (Pipeline, Vec<Exportable>) {
-    let (command, _attrs) = extract_attributes(working_set, lite_command);
+    let (command, _attrs) = extract_attributes(lite_command);
     let spans = &command.parts[..];
 
     let export_span = if let Some(sp) = spans.first() {
@@ -1483,12 +1467,7 @@ pub fn parse_export_in_module(
         let kw_name = working_set.get_span_contents(*kw_span);
         match kw_name {
             b"def" => {
-                let lite_command = LiteCommand {
-                    comments: lite_command.comments.clone(),
-                    parts: lite_command.parts.clone(),
-                    pipe: lite_command.pipe,
-                    redirection: lite_command.redirection.clone(),
-                };
+                let lite_command = lite_command.clone();
 
                 let (pipeline, cmd_result) =
                     if working_set.get_span_contents(lite_command.parts[0]) == b"@" {
@@ -1547,12 +1526,7 @@ pub fn parse_export_in_module(
                 result
             }
             b"extern" => {
-                let lite_command = LiteCommand {
-                    comments: lite_command.comments.clone(),
-                    parts: lite_command.parts.to_vec(),
-                    pipe: lite_command.pipe,
-                    redirection: lite_command.redirection.clone(),
-                };
+                let lite_command = lite_command.clone();
                 let extern_name = [b"export ", kw_name].concat();
 
                 let pipeline = if working_set.get_span_contents(lite_command.parts[0]) == b"@" {
@@ -1627,6 +1601,7 @@ pub fn parse_export_in_module(
                     parts: spans[1..].to_vec(),
                     pipe: lite_command.pipe,
                     redirection: lite_command.redirection.clone(),
+                    attribute_idx: lite_command.attribute_idx.clone(),
                 };
                 let pipeline = parse_alias(working_set, &lite_command, Some(module_name));
 
@@ -1684,6 +1659,7 @@ pub fn parse_export_in_module(
                     parts: spans[1..].to_vec(),
                     pipe: lite_command.pipe,
                     redirection: lite_command.redirection.clone(),
+                    attribute_idx: lite_command.attribute_idx.clone(),
                 };
                 let (pipeline, exportables) =
                     parse_use(working_set, &lite_command, Some(parent_module));
@@ -1990,7 +1966,7 @@ pub fn parse_module_block(
 
     for pipeline in &output.block {
         if pipeline.commands.len() == 1 {
-            parse_def_predecl(working_set, &pipeline.commands[0].parts);
+            parse_def_predecl(working_set, &pipeline.commands[0]);
         }
     }
 
@@ -2002,7 +1978,7 @@ pub fn parse_module_block(
     for pipeline in output.block.iter() {
         if pipeline.commands.len() == 1 {
             let command = &pipeline.commands[0];
-            let (bare_command, _) = extract_attributes(working_set, command);
+            let (bare_command, _) = extract_attributes(command);
 
             let name = working_set.get_span_contents(bare_command.parts[0]);
 

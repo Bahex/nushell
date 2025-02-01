@@ -1440,34 +1440,25 @@ fn find_longest_decl(
     (cmd_start, pos, name, maybe_decl_id)
 }
 
-pub fn extract_attributes(
-    working_set: &StateWorkingSet,
-    lite_command: &LiteCommand,
-) -> (LiteCommand, Vec<LiteCommand>) {
+pub fn extract_attributes(lite_command: &LiteCommand) -> (LiteCommand, Vec<LiteCommand>) {
     let mut attributes = vec![];
-    let mut command = LiteCommand::default();
+    let mut start = 0;
 
-    let mut is_attr = false;
-
-    for &span in &lite_command.parts {
-        let content = working_set.get_span_contents(span);
-        match content {
-            b"@" => {
-                is_attr = true;
-                command.push(span)
-            }
-            b"\n" | b";" => {
-                attributes.push(std::mem::take(&mut command));
-                is_attr = false;
-            }
-            _ => command.push(span),
-        }
-    }
-    if is_attr {
-        attributes.push(std::mem::take(&mut command));
+    for &end in lite_command.attribute_idx.iter() {
+        attributes.push(LiteCommand {
+            parts: lite_command.parts[start..end].to_owned(),
+            ..Default::default()
+        });
+        start = end;
     }
 
-    command.comments = lite_command.comments.clone();
+    let command = LiteCommand {
+        pipe: lite_command.pipe,
+        comments: lite_command.comments.clone(),
+        parts: lite_command.parts[start..].to_owned(),
+        redirection: lite_command.redirection.clone(),
+        attribute_idx: vec![],
+    };
 
     (command, attributes)
 }
@@ -6272,7 +6263,7 @@ pub fn parse_block(
     // that share the same block can see each other
     for pipeline in &lite_block.block {
         if pipeline.commands.len() == 1 {
-            parse_def_predecl(working_set, &pipeline.commands[0].parts)
+            parse_def_predecl(working_set, &pipeline.commands[0])
         }
     }
 
