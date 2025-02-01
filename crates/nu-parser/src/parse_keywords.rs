@@ -389,12 +389,25 @@ pub fn parse_attribute_block(
 
     let mut attributes = vec![];
     let mut command = LiteCommand::default();
+
+    let mut is_attr = false;
+
     for &span in &lite_command.parts {
         let content = working_set.get_span_contents(span);
         match content {
-            b"\n" | b";" => attributes.push(std::mem::take(&mut command)),
+            b"@" => {
+                is_attr = true;
+                command.push(span)
+            }
+            b"\n" | b";" => {
+                attributes.push(std::mem::take(&mut command));
+                is_attr = false;
+            }
             _ => command.push(span),
         }
+    }
+    if is_attr {
+        attributes.push(std::mem::take(&mut command));
     }
 
     let attributes = attributes
