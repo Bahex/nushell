@@ -402,22 +402,40 @@ pub fn parse_attribute_block(
         .map(|cmd| parse_attribute(working_set, cmd))
         .collect::<Vec<_>>();
 
-    let (expr, decl) = if !command.parts.is_empty() {
-        parse_def_inner(working_set, &attributes, &command, module_name)
-    } else {
-        (
-            garbage(
-                working_set,
-                attributes
-                    .last()
-                    .expect("Attribute block must contain at least one attribute")
-                    .0
-                    .expr
-                    .span
-                    .past(),
+    let (expr, decl) = match command.parts.first_chunk() {
+        Some(&[first, second]) => match (
+            working_set.get_span_contents(first),
+            working_set.get_span_contents(second),
+        ) {
+            (b"def", _) | (b"export", b"def") => {
+                parse_def_inner(working_set, &attributes, &command, module_name)
+            }
+            (b"extern", _) | (b"export", b"extern") => (
+                parse_extern_inner(working_set, &attributes, &command, module_name),
+                None,
             ),
-            None,
-        )
+            _ => todo!(),
+        },
+        None => {
+            // TODO(Bahex): Add a more appropriate error
+            working_set.error(ParseError::ExtraPositional(
+                "Attribute without definition".into(),
+                Span::unknown(),
+            ));
+            (
+                garbage(
+                    working_set,
+                    attributes
+                        .last()
+                        .expect("Attribute block must contain at least one attribute")
+                        .0
+                        .expr
+                        .span
+                        .past(),
+                ),
+                None,
+            )
+        }
     };
 
     let ty = expr.ty.clone();
@@ -715,7 +733,18 @@ pub fn parse_extern(
     lite_command: &LiteCommand,
     module_name: Option<&[u8]>,
 ) -> Pipeline {
+    let expr = parse_extern_inner(working_set, &[], lite_command, module_name);
+    Pipeline::from_vec(vec![expr])
+}
+
+fn parse_extern_inner(
+    working_set: &mut StateWorkingSet,
+    attributes: &[(Attribute, Option<String>)],
+    lite_command: &LiteCommand,
+    module_name: Option<&[u8]>,
+) -> Expression {
     let spans = &lite_command.parts;
+    let concat_span = Span::concat(spans);
 
     let (description, extra_description) = working_set.build_desc(&lite_command.comments);
 
@@ -735,11 +764,11 @@ pub fn parse_extern(
             "internal error: Wrong call name for extern command".into(),
             Span::concat(spans),
         ));
-        return garbage_pipeline(working_set, spans);
+        return garbage(working_set, concat_span);
     }
     if let Some(redirection) = lite_command.redirection.as_ref() {
         working_set.error(redirecting_builtin_error("extern", redirection));
-        return garbage_pipeline(working_set, spans);
+        return garbage(working_set, concat_span);
     }
 
     // Parsing the spans and checking that they match the register signature
@@ -751,7 +780,7 @@ pub fn parse_extern(
                 "internal error: def declaration not found".into(),
                 Span::concat(spans),
             ));
-            return garbage_pipeline(working_set, spans);
+            return garbage(working_set, concat_span);
         }
         Some(decl_id) => {
             working_set.enter_scope();
@@ -765,7 +794,7 @@ pub fn parse_extern(
                     String::from_utf8_lossy(&extern_call).as_ref(),
                 ) {
                     working_set.error(err);
-                    return garbage_pipeline(working_set, spans);
+                    return garbage(working_set, concat_span);
                 }
             }
 
@@ -799,12 +828,7 @@ pub fn parse_extern(
                         "main".to_string(),
                         name_expr_span,
                     ));
-                    return Pipeline::from_vec(vec![Expression::new(
-                        working_set,
-                        Expr::Call(call),
-                        call_span,
-                        Type::Any,
-                    )]);
+                    return Expression::new(working_set, Expr::Call(call), call_span, Type::Any);
                 }
             }
 
@@ -875,12 +899,7 @@ pub fn parse_extern(
         }
     }
 
-    Pipeline::from_vec(vec![Expression::new(
-        working_set,
-        Expr::Call(call),
-        call_span,
-        Type::Any,
-    )])
+    Expression::new(working_set, Expr::Call(call), call_span, Type::Any)
 }
 
 fn check_alias_name<'a>(working_set: &mut StateWorkingSet, spans: &'a [Span]) -> Option<&'a Span> {
