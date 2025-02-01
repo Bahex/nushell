@@ -50,6 +50,7 @@ $env.config.color_config = {
     shape_nothing: light_cyan
     shape_operator: yellow
     shape_pipe: purple_bold
+    shape_attribute: purple_bold
     shape_range: yellow_bold
     shape_record: cyan_bold
     shape_redirection: purple_bold
