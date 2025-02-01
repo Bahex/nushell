@@ -394,6 +394,13 @@ pub fn parse_attribute_block(
         .map(|cmd| parse_attribute(working_set, cmd))
         .collect::<Vec<_>>();
 
+    let last_attribute_span = attributes
+        .last()
+        .expect("Attribute block must contain at least one attribute")
+        .0
+        .expr
+        .span;
+
     let first_word = command
         .parts
         .first()
@@ -413,26 +420,12 @@ pub fn parse_attribute_block(
         ),
         (Some(_), _) => {
             let span = Span::concat(&command.parts);
-            // TODO(Bahex): Add a more appropriate error
-            working_set.error(ParseError::InternalError(
-                "Unsupported command".into(),
-                span,
-            ));
+            working_set.error(ParseError::AttributeRequiresDefinition(last_attribute_span));
             (garbage(working_set, span), None)
         }
         (None, _) => {
-            let span = attributes
-                .last()
-                .expect("Attribute block must contain at least one attribute")
-                .0
-                .expr
-                .span;
-            // TODO(Bahex): Add a more appropriate error
-            working_set.error(ParseError::ExtraPositional(
-                "Attribute without definition".into(),
-                span,
-            ));
-            (garbage(working_set, span.past()), None)
+            working_set.error(ParseError::AttributeRequiresDefinition(last_attribute_span));
+            (garbage(working_set, last_attribute_span.past()), None)
         }
     };
 
