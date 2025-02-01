@@ -204,6 +204,7 @@ pub fn lite_parse(tokens: &[Token]) -> (LiteBlock, Option<ParseError>) {
     #[derive(PartialEq, Eq)]
     enum Mode {
         Assignment,
+        Attribute,
         Normal,
     }
 
@@ -237,6 +238,26 @@ pub fn lite_parse(tokens: &[Token]) -> (LiteBlock, Option<ParseError>) {
                         mode = Mode::Normal;
                         pipeline.push(&mut command);
                         block.push(&mut pipeline);
+                    }
+                    TokenContents::Comment => {
+                        command.comments.push(token.span);
+                        curr_comment = None;
+                    }
+                    _ => command.push(token.span),
+                }
+            }
+            Mode::Attribute => {
+                match &token.contents {
+                    // Consume until semicolon or terminating EOL. Attributes can't contain pipelines or redirections.
+                    TokenContents::Eol | TokenContents::Semicolon => {
+                        command.push(token.span);
+                        mode = Mode::Normal;
+                        if matches!(last_token, TokenContents::Eol | TokenContents::Semicolon) {
+                            // Clear out the comment as we're entering a new comment
+                            curr_comment = None;
+                            pipeline.push(&mut command);
+                            block.push(&mut pipeline);
+                        }
                     }
                     TokenContents::Comment => {
                         command.comments.push(token.span);
@@ -311,7 +332,13 @@ pub fn lite_parse(tokens: &[Token]) -> (LiteBlock, Option<ParseError>) {
                             command.comments.push(token.span);
                             curr_comment = None;
                         }
-                        TokenContents::AttributeOperator => todo!(),
+                        TokenContents::AttributeOperator => match last_token {
+                            TokenContents::Eol | TokenContents::Semicolon => {
+                                mode = Mode::Attribute;
+                                command.push(token.span);
+                            }
+                            _ => command.push(token.span),
+                        },
                     },
                     None => {
                         match &token.contents {
@@ -440,7 +467,13 @@ pub fn lite_parse(tokens: &[Token]) -> (LiteBlock, Option<ParseError>) {
                                     }
                                 }
                             }
-                            TokenContents::AttributeOperator => todo!(),
+                            TokenContents::AttributeOperator => match last_token {
+                                TokenContents::Eol | TokenContents::Semicolon => {
+                                    mode = Mode::Attribute;
+                                    command.push(token.span);
+                                }
+                                _ => command.push(token.span),
+                            },
                         }
                     }
                 }
