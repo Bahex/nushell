@@ -1978,11 +1978,21 @@ pub fn parse_module_block(
     for pipeline in output.block.iter() {
         if pipeline.commands.len() == 1 {
             let command = &pipeline.commands[0];
-            let (bare_command, _) = extract_attributes(command);
+            let (bare_command, attrs) = extract_attributes(command);
 
             let name = working_set.get_span_contents(bare_command.parts[0]);
 
             match name {
+                b"def" | b"extern" if !attrs.is_empty() => {
+                    block.pipelines.push(
+                        parse_attribute_block(
+                            working_set,
+                            command,
+                            None, // using commands named as the module locally is OK
+                        )
+                        .0,
+                    )
+                }
                 b"def" => {
                     block.pipelines.push(
                         parse_def(
@@ -1993,12 +2003,12 @@ pub fn parse_module_block(
                         .0,
                     )
                 }
-                b"const" => block
-                    .pipelines
-                    .push(parse_const(working_set, &command.parts).0),
                 b"extern" => block
                     .pipelines
                     .push(parse_extern(working_set, command, None)),
+                b"const" => block
+                    .pipelines
+                    .push(parse_const(working_set, &command.parts).0),
                 b"alias" => {
                     block.pipelines.push(parse_alias(
                         working_set,
