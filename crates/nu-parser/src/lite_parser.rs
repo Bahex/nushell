@@ -68,7 +68,7 @@ pub struct LiteCommand {
 }
 
 impl LiteCommand {
-    fn push(&mut self, span: Span) {
+    pub(crate) fn push(&mut self, span: Span) {
         self.parts.push(span);
     }
 

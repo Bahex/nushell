@@ -5732,6 +5732,7 @@ pub fn parse_builtin_commands(
     let name = working_set.get_span_contents(lite_command.parts[0]);
 
     match name {
+        b"@" => parse_attribute_block(working_set, lite_command, None).0,
         b"def" => parse_def(working_set, lite_command, None).0,
         b"extern" => parse_extern(working_set, lite_command, None),
         b"let" => parse_let(

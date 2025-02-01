@@ -363,6 +363,25 @@ fn verify_not_reserved_variable_name(working_set: &mut StateWorkingSet, name: &s
     }
 }
 
+pub fn parse_attribute_block(
+    working_set: &mut StateWorkingSet<'_>,
+    lite_command: &LiteCommand,
+    module_name: Option<&[u8]>,
+) -> (Pipeline, Option<(Vec<u8>, DeclId)>) {
+    trace!("parsing: attribute_block");
+
+    let mut attributes = vec![];
+    let mut command = LiteCommand::default();
+    for &span in &lite_command.parts {
+        let content = working_set.get_span_contents(span);
+        match content {
+            b"\n" | b";" => attributes.push(std::mem::take(&mut command)),
+            _ => command.push(span),
+        }
+    }
+    todo!()
+}
+
 // Returns also the parsed command name and ID
 pub fn parse_def(
     working_set: &mut StateWorkingSet,
