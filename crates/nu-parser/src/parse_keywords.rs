@@ -175,7 +175,10 @@ pub fn parse_def_predecl(working_set: &mut StateWorkingSet, spans: &[Span]) {
             pos += 1;
         }
 
-        working_set.get_span_contents(spans[pos - 1]).to_vec()
+        let Some(span) = spans.get(pos - 1) else {
+            return;
+        };
+        working_set.get_span_contents(*span).to_vec()
     } else {
         return;
     };
