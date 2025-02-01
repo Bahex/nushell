@@ -1441,7 +1441,7 @@ pub fn parse_export_in_module(
     module_name: &[u8],
     parent_module: &mut Module,
 ) -> (Pipeline, Vec<Exportable>) {
-    let (command, attrs) = extract_attributes(working_set, lite_command);
+    let (command, _attrs) = extract_attributes(working_set, lite_command);
     let spans = &command.parts[..];
 
     let export_span = if let Some(sp) = spans.first() {
