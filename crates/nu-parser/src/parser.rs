@@ -1440,6 +1440,38 @@ fn find_longest_decl(
     (cmd_start, pos, name, maybe_decl_id)
 }
 
+pub fn extract_attributes(
+    working_set: &StateWorkingSet,
+    lite_command: &LiteCommand,
+) -> (LiteCommand, Vec<LiteCommand>) {
+    let mut attributes = vec![];
+    let mut command = LiteCommand::default();
+
+    let mut is_attr = false;
+
+    for &span in &lite_command.parts {
+        let content = working_set.get_span_contents(span);
+        match content {
+            b"@" => {
+                is_attr = true;
+                command.push(span)
+            }
+            b"\n" | b";" => {
+                attributes.push(std::mem::take(&mut command));
+                is_attr = false;
+            }
+            _ => command.push(span),
+        }
+    }
+    if is_attr {
+        attributes.push(std::mem::take(&mut command));
+    }
+
+    command.comments = lite_command.comments.clone();
+
+    (command, attributes)
+}
+
 pub fn parse_attribute(
     working_set: &mut StateWorkingSet,
     lite_command: &LiteCommand,

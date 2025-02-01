@@ -387,35 +387,12 @@ pub fn parse_attribute_block(
 ) -> (Pipeline, Option<(Vec<u8>, DeclId)>) {
     trace!("parsing: attribute_block");
 
-    let mut attributes = vec![];
-    let mut command = LiteCommand::default();
-
-    let mut is_attr = false;
-
-    for &span in &lite_command.parts {
-        let content = working_set.get_span_contents(span);
-        match content {
-            b"@" => {
-                is_attr = true;
-                command.push(span)
-            }
-            b"\n" | b";" => {
-                attributes.push(std::mem::take(&mut command));
-                is_attr = false;
-            }
-            _ => command.push(span),
-        }
-    }
-    if is_attr {
-        attributes.push(std::mem::take(&mut command));
-    }
+    let (command, attributes) = extract_attributes(working_set, lite_command);
 
     let attributes = attributes
         .iter()
         .map(|cmd| parse_attribute(working_set, cmd))
         .collect::<Vec<_>>();
-
-    command.comments = lite_command.comments.clone();
 
     let (expr, decl) = match command.parts.first_chunk() {
         Some(&[first, second]) => match (
