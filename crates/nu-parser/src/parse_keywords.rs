@@ -149,10 +149,27 @@ pub fn parse_def_predecl(working_set: &mut StateWorkingSet, spans: &[Span]) {
     let mut pos = 0;
 
     let def_type_name = if spans.len() >= 3 {
-        // definition can't have only two spans, minimum is 3, e.g., 'extern spam []'
-        let first_word = working_set.get_span_contents(spans[0]);
+        // skip attributes if present
+        if working_set.get_span_contents(spans[0]) == b"@" {
+            let iife = (|| -> Option<()> {
+                while working_set.get_span_contents(*spans.get(pos)?) == b"@" {
+                    while !matches!(
+                        working_set.get_span_contents(*spans.get(pos)?),
+                        b"\n" | b";"
+                    ) {
+                        pos += 1;
+                    }
+                    pos += 1;
+                }
+                Some(())
+            })();
+            if iife.is_none() {
+                return;
+            }
+        }
 
-        if first_word == b"export" {
+        // definition can't have only two spans, minimum is 3, e.g., 'extern spam []'
+        if working_set.get_span_contents(spans[pos]) == b"export" {
             pos += 2;
         } else {
             pos += 1;
