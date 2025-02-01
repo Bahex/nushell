@@ -46,6 +46,7 @@ pub enum FlatShape {
     Table,
     Variable(VarId),
     VarDecl(VarId),
+    Attribute,
 }
 
 impl FlatShape {
@@ -86,6 +87,7 @@ impl FlatShape {
             FlatShape::Table => "shape_table",
             FlatShape::Variable(_) => "shape_variable",
             FlatShape::VarDecl(_) => "shape_vardecl",
+            FlatShape::Attribute => "shape_attribute",
         }
     }
 }
@@ -189,6 +191,13 @@ fn flatten_expression_into(
     }
 
     match &expr.expr {
+        Expr::AttributeBlock(ab) => {
+            for attr in &ab.attributes {
+                output.push((attr.operator, FlatShape::Attribute));
+                flatten_expression_into(working_set, &attr.expr, output);
+            }
+            flatten_expression_into(working_set, &ab.item, output);
+        }
         Expr::BinaryOp(lhs, op, rhs) => {
             flatten_expression_into(working_set, lhs, output);
             flatten_expression_into(working_set, op, output);

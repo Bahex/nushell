@@ -147,6 +147,7 @@ impl Highlighter for NuHighlighter {
                 FlatShape::Redirection => add_colored_token(&shape.1, next_token),
                 FlatShape::Custom(..) => add_colored_token(&shape.1, next_token),
                 FlatShape::MatchPattern => add_colored_token(&shape.1, next_token),
+                FlatShape::Attribute => add_colored_token(&shape.1, next_token),
             }
             last_seen_span = shape.0.end;
         }
@@ -334,6 +335,28 @@ fn find_matching_block_end_in_expr(
             Expr::MatchBlock(_) => None,
             Expr::Nothing => None,
             Expr::Garbage => None,
+
+            Expr::AttributeBlock(ab) => ab
+                .attributes
+                .iter()
+                .find_map(|attr| {
+                    find_matching_block_end_in_expr(
+                        line,
+                        working_set,
+                        &attr.expr,
+                        global_span_offset,
+                        global_cursor_offset,
+                    )
+                })
+                .or_else(|| {
+                    find_matching_block_end_in_expr(
+                        line,
+                        working_set,
+                        &ab.item,
+                        global_span_offset,
+                        global_cursor_offset,
+                    )
+                }),
 
             Expr::Table(table) => {
                 if expr_last == global_cursor_offset {
