@@ -369,7 +369,7 @@ pub fn parse_def(
     lite_command: &LiteCommand,
     module_name: Option<&[u8]>,
 ) -> (Pipeline, Option<(Vec<u8>, DeclId)>) {
-    let spans = &lite_command.parts[..];
+    let spans = lite_command.command_parts();
 
     let (desc, extra_desc) = working_set.build_desc(&lite_command.comments);
 
@@ -652,7 +652,7 @@ pub fn parse_extern(
     lite_command: &LiteCommand,
     module_name: Option<&[u8]>,
 ) -> Pipeline {
-    let spans = &lite_command.parts;
+    let spans = lite_command.command_parts();
 
     let (description, extra_description) = working_set.build_desc(&lite_command.comments);
 
@@ -1131,8 +1131,9 @@ pub fn parse_export_in_block(
 ) -> Pipeline {
     let call_span = Span::concat(&lite_command.parts);
 
-    let full_name = if lite_command.parts.len() > 1 {
-        let sub = working_set.get_span_contents(lite_command.parts[1]);
+    let parts = lite_command.command_parts();
+    let full_name = if parts.len() > 1 {
+        let sub = working_set.get_span_contents(parts[1]);
         match sub {
             b"alias" => "export alias",
             b"def" => "export def",
@@ -1155,14 +1156,14 @@ pub fn parse_export_in_block(
         let ParsedInternalCall { call, output, .. } = parse_internal_call(
             working_set,
             if full_name == "export" {
-                lite_command.parts[0]
+                parts[0]
             } else {
-                Span::concat(&lite_command.parts[0..2])
+                Span::concat(&parts[0..2])
             },
             if full_name == "export" {
-                &lite_command.parts[1..]
+                &parts[1..]
             } else {
-                &lite_command.parts[2..]
+                &parts[2..]
             },
             decl_id,
         );
@@ -1196,7 +1197,7 @@ pub fn parse_export_in_block(
         // export by itself is meaningless
         working_set.error(ParseError::UnexpectedKeyword(
             "export".into(),
-            lite_command.parts[0],
+            parts[0],
         ));
         return garbage_pipeline(working_set, &lite_command.parts);
     }
@@ -1226,7 +1227,7 @@ pub fn parse_export_in_module(
     module_name: &[u8],
     parent_module: &mut Module,
 ) -> (Pipeline, Vec<Exportable>) {
-    let spans = &lite_command.parts[..];
+    let spans = lite_command.command_parts();
 
     let export_span = if let Some(sp) = spans.first() {
         if working_set.get_span_contents(*sp) != b"export" {
@@ -1743,7 +1744,7 @@ pub fn parse_module_block(
 
     for pipeline in &output.block {
         if pipeline.commands.len() == 1 {
-            parse_def_predecl(working_set, &pipeline.commands[0].parts);
+            parse_def_predecl(working_set, pipeline.commands[0].command_parts());
         }
     }
 
@@ -1756,7 +1757,7 @@ pub fn parse_module_block(
         if pipeline.commands.len() == 1 {
             let command = &pipeline.commands[0];
 
-            let name = working_set.get_span_contents(command.parts[0]);
+            let name = working_set.get_span_contents(command.command_parts()[0]);
 
             match name {
                 b"def" => {
