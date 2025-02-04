@@ -1,12 +1,14 @@
 use crate::completions::{
-    CommandCompletion, Completer, CompletionOptions, CustomCompletion, DirectoryCompletion,
-    DotNuCompletion, FileCompletion, FlagCompletion, OperatorCompletion, VariableCompletion,
+    attribute_completions::AttributableCompletion, AttributeCompletion, CommandCompletion,
+    Completer, CompletionOptions, CustomCompletion, DirectoryCompletion, DotNuCompletion,
+    FileCompletion, FlagCompletion, OperatorCompletion, VariableCompletion,
 };
 use log::debug;
 use nu_color_config::{color_record_to_nustyle, lookup_ansi_color_style};
 use nu_engine::eval_block;
 use nu_parser::{flatten_pipeline_element, parse, FlatShape};
 use nu_protocol::{
+    ast::Expr,
     debugger::WithoutDebug,
     engine::{Closure, EngineState, Stack, StateWorkingSet},
     PipelineData, Span, Value,
@@ -167,11 +169,25 @@ impl NuCompleter {
                 let flattened = flatten_pipeline_element(&working_set, pipeline_element);
                 let mut spans: Vec<String> = vec![];
 
+                let mut is_attr = false;
+                let mut last_attr_start = 0;
+
                 for (flat_idx, flat) in flattened.iter().enumerate() {
                     let is_passthrough_command = spans
                         .first()
                         .filter(|content| content.as_str() == "sudo" || content.as_str() == "doas")
                         .is_some();
+
+                    match flat.1 {
+                        FlatShape::Attribute => {
+                            is_attr = true;
+                            last_attr_start = flat_idx + 1;
+                        }
+                        FlatShape::Pipe if flat.0.start == flat.0.end => {
+                            is_attr = false;
+                        }
+                        _ => {}
+                    }
 
                     // Read the current span to string
                     let current_span = working_set.get_span_contents(flat.0);
@@ -204,6 +220,57 @@ impl NuCompleter {
                         // Parses the prefix. Completion should look up to the cursor position, not after.
                         let index = pos - flat.0.start;
                         let prefix = &current_span[..index];
+
+                        if let Expr::AttributeBlock(ab) = &pipeline_element.expr.expr {
+                            if is_attr {
+                                if !matches!(
+                                    flattened[last_attr_start].1,
+                                    FlatShape::InternalCall(_)
+                                ) {
+                                    let mut completer = AttributeCompletion;
+                                    return self.process_completion(
+                                        &mut completer,
+                                        &working_set,
+                                        prefix,
+                                        new_span,
+                                        fake_offset,
+                                        pos,
+                                    );
+                                }
+                            } else if matches!(flattened[flat_idx - 1].1, FlatShape::Pipe) {
+                                let mut completer = AttributableCompletion;
+                                return self.process_completion(
+                                    &mut completer,
+                                    &working_set,
+                                    prefix,
+                                    new_span,
+                                    fake_offset,
+                                    pos,
+                                );
+                            }
+
+                            if prefix.starts_with(b"-") {
+                                // Try to complete flag internally
+                                let expr = if is_attr {
+                                    ab.attributes
+                                        .last()
+                                        .expect("at least one attribute")
+                                        .expr
+                                        .clone()
+                                } else {
+                                    ab.item.as_ref().clone()
+                                };
+                                let mut completer = FlagCompletion::new(expr);
+                                return self.process_completion(
+                                    &mut completer,
+                                    &working_set,
+                                    prefix,
+                                    new_span,
+                                    fake_offset,
+                                    pos,
+                                );
+                            }
+                        };
 
                         // Variables completion
                         if prefix.starts_with(b"$") || most_left_var.is_some() {
