@@ -89,6 +89,14 @@ impl Command for KnownExternal {
             .map(CustomExample::to_example)
             .collect()
     }
+
+    fn search_terms(&self) -> Vec<&str> {
+        self.signature
+            .search_terms
+            .iter()
+            .map(String::as_str)
+            .collect()
+    }
 }
 
 /// Transform the args from an `ast::Call` onto a `run-external` call
