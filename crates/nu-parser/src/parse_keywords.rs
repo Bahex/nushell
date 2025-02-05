@@ -1393,15 +1393,6 @@ pub fn parse_export_in_block(
         let Ok(is_help) = has_flag_const(working_set, &call, "help") else {
             return garbage_pipeline(working_set, &lite_command.parts);
         };
-
-        if starting_error_count != working_set.parse_errors.len() || is_help {
-            return Pipeline::from_vec(vec![Expression::new(
-                working_set,
-                Expr::Call(call),
-                call_span,
-                output,
-            )]);
-        }
     } else {
         working_set.error(ParseError::UnknownState(
             format!("internal error: '{full_name}' declaration not found",),
