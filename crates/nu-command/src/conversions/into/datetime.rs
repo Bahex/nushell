@@ -1,5 +1,10 @@
+use std::str::FromStr;
+
 use crate::{generate_strftime_list, parse_date_from_string};
-use chrono::{DateTime, FixedOffset, Local, NaiveDateTime, TimeZone, Utc};
+use chrono::{
+    DateTime, Datelike, FixedOffset, Local, NaiveDate, NaiveDateTime, NaiveTime, Offset, TimeZone,
+    Timelike, Utc,
+};
 use human_date_parser::{from_human_time, ParseResult};
 use nu_cmd_base::input_handler::{operate, CmdArgument};
 use nu_engine::command_prelude::*;
@@ -68,6 +73,7 @@ impl Command for IntoDatetime {
             (Type::List(Box::new(Type::String)), Type::List(Box::new(Type::Date))),
             (Type::table(), Type::table()),
             (Type::record(), Type::record()),
+            (Type::record(), Type::Date),
             (Type::Nothing, Type::table()),
             // FIXME Type::Any input added to disable pipeline input type checking, as run-time checks can raise undesirable type errors
             // which aren't caught by the parser. see https://github.com/nushell/nushell/pull/14922 for more details
@@ -287,6 +293,10 @@ fn action(input: &Value, args: &Arguments, head: Span) -> Value {
         return input.clone();
     }
 
+    if let Ok(record) = input.as_record() {
+        return Value::date(from_record(record), head);
+    }
+
     // Let's try dtparse first
     if matches!(input, Value::String { .. }) && dateformat.is_none() {
         let span = input.span();
@@ -500,6 +510,144 @@ fn action(input: &Value, args: &Arguments, head: Span) -> Value {
             head,
         ),
     }
+}
+
+fn from_record(input: &Record) -> DateTime<FixedOffset> {
+    #[derive(Clone, Copy, PartialEq, Eq)]
+    enum Fields {
+        None,
+        Nanosecond,
+        Microsecond,
+        Millisecond,
+        Second,
+        Minute,
+        Hour,
+        Day,
+        Month,
+        Year,
+    }
+
+    impl PartialOrd for Fields {
+        fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+            Some(self.cmp(other))
+        }
+    }
+    impl Ord for Fields {
+        fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+            (*self as u8).cmp(&(*other as u8))
+        }
+    }
+
+    let now = Local::now();
+    let mut year = None;
+    let mut month = None;
+    let mut day = None;
+    let mut hour = None;
+    let mut minute = None;
+    let mut second = None;
+    let mut millisecond = None;
+    let mut microsecond = None;
+    let mut nanosecond = None;
+    let mut timezone = None;
+
+    let mut largest = Fields::None;
+
+    for (key, val) in input.iter() {
+        match key.as_str() {
+            "year" => {
+                largest = largest.max(Fields::Year);
+                year = val.as_int().ok().map(|x| x as i32);
+            }
+            "month" => {
+                largest = largest.max(Fields::Month);
+                month = val.as_int().ok().map(|x| x as u32);
+            }
+            "day" => {
+                largest = largest.max(Fields::Day);
+                day = val.as_int().ok().map(|x| x as u32);
+            }
+            "hour" => {
+                largest = largest.max(Fields::Hour);
+                hour = val.as_int().ok().map(|x| x as u32);
+            }
+            "minute" => {
+                largest = largest.max(Fields::Minute);
+                minute = val.as_int().ok().map(|x| x as u32);
+            }
+            "second" => {
+                largest = largest.max(Fields::Second);
+                second = val.as_int().ok().map(|x| x as u32);
+            }
+            "millisecond" => {
+                largest = largest.max(Fields::Millisecond);
+                millisecond = val.as_int().ok().map(|x| x as u32);
+            }
+            "microsecond" => {
+                largest = largest.max(Fields::Microsecond);
+                microsecond = val.as_int().ok().map(|x| x as u32);
+            }
+            "nanosecond" => {
+                largest = largest.max(Fields::Nanosecond);
+                nanosecond = val.as_int().ok().map(|x| x as u32);
+            }
+            "timezone" => {
+                let Ok(s) = val.as_str() else {
+                    continue;
+                };
+                timezone = FixedOffset::from_str(s).ok()
+            }
+            _ => {}
+        }
+    }
+
+    let year = year
+        .or((largest < Fields::Year).then_some(now.year()))
+        .unwrap_or(0);
+    let month = month
+        .or((largest < Fields::Month).then_some(now.month()))
+        .unwrap_or(0);
+    let day = day
+        .or((largest < Fields::Day).then_some(now.day()))
+        .unwrap_or(0);
+    let hour = hour
+        .or((largest < Fields::Hour).then_some(now.hour()))
+        .unwrap_or(0);
+    let minute = minute
+        .or((largest < Fields::Minute).then_some(now.minute()))
+        .unwrap_or(0);
+    let second = second
+        .or((largest < Fields::Second).then_some(now.second()))
+        .unwrap_or(0);
+    let nanosecond = {
+        let mut nanos = now.nanosecond();
+        let mut millis = nanos / 1_000_000;
+        nanos %= 1_000_000;
+        let mut micros = nanos / 1_000;
+        nanos %= 1_000;
+
+        millis = millisecond
+            .or((largest < Fields::Nanosecond).then_some(millis))
+            .unwrap_or(0);
+
+        micros = microsecond
+            .or((largest < Fields::Nanosecond).then_some(micros))
+            .unwrap_or(0);
+
+        nanos = nanosecond
+            .or((largest < Fields::Nanosecond).then_some(nanos))
+            .unwrap_or(0);
+
+        millis * 1_000_000 + micros * 1_000 + nanos
+    };
+
+    let date = NaiveDate::from_ymd_opt(year, month, day).unwrap_or(now.date_naive());
+    let time = NaiveTime::from_hms_nano_opt(hour, minute, second, nanosecond).unwrap_or(now.time());
+    let tz = timezone.unwrap_or(now.offset().fix());
+
+    date.and_time(time)
+        .and_local_timezone(tz)
+        .earliest()
+        .unwrap_or(now.fixed_offset())
 }
 
 fn list_human_readable_examples(span: Span) -> Value {
