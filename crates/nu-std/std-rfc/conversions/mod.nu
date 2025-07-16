@@ -8,10 +8,10 @@ export def "into list" []: any -> list {
   let input = $in
   let type = ($input | describe --detailed | get type)
   match $type {
-    range => {$input | each {||}}
-    list => $input
-    table => $input
-    record => {$input | transpose -d key value}
+    "range" => {$input | each {||}}
+    "list" => $input
+    "table" => $input
+    "record" => {$input | transpose -d key value}
     _ => [ $input ]
   }
 }
