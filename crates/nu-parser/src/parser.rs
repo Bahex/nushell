@@ -2426,7 +2426,40 @@ pub fn parse_string_interpolation(working_set: &mut StateWorkingSet, span: Span)
     let mut output = vec![];
     let mut mode = InterpolationMode::String;
     let mut token_start = start;
-    let mut delimiter_stack = vec![];
+
+    #[repr(u8)]
+    #[derive(Clone, Copy, PartialEq, Eq)]
+    enum Delimiter {
+        SingleQuote = b'\'',
+        DoubleQuote = b'"',
+        Backtick = b'`',
+        ParenLeft = b'(',
+        ParenRight = b')',
+    }
+
+    impl Delimiter {
+        const fn from_u8(b: u8) -> Option<Self> {
+            Some(match b {
+                b'\'' => Self::SingleQuote,
+                b'"' => Self::DoubleQuote,
+                b'`' => Self::Backtick,
+                b'(' => Self::ParenLeft,
+                b')' => Self::ParenRight,
+                _ => return None,
+            })
+        }
+        const fn is_paren(self) -> bool {
+            matches!(self, Self::ParenLeft | Self::ParenRight)
+        }
+        const fn pair(self) -> Self {
+            match self {
+                Self::ParenLeft => Self::ParenRight,
+                Self::ParenRight => Self::ParenLeft,
+                _ => self,
+            }
+        }
+    }
+    let mut delimiter_stack: Vec<Delimiter> = vec![];
 
     let mut consecutive_backslashes: usize = 0;
 
@@ -2474,19 +2507,18 @@ pub fn parse_string_interpolation(working_set: &mut StateWorkingSet, span: Span)
         }
 
         if mode == InterpolationMode::Expression {
-            let byte = current_byte;
-            match delimiter_stack.last() {
-                Some(&d @ (b'\'' | b'"' | b'`')) => {
+            let byte = Delimiter::from_u8(current_byte);
+            match (delimiter_stack.last().copied(), byte) {
+                (Some(d), Some(byte)) if !d.is_paren() => {
                     if byte == d {
                         delimiter_stack.pop();
                     }
                 }
-                _ if byte == b'\'' => delimiter_stack.push(b'\''),
-                _ if byte == b'"' => delimiter_stack.push(b'"'),
-                _ if byte == b'`' => delimiter_stack.push(b'`'),
-                _ if byte == b'(' => delimiter_stack.push(b')'),
-                last if byte == b')' => {
-                    if let Some(b')') = last {
+                (_, Some(byte)) if byte != Delimiter::ParenRight => {
+                    delimiter_stack.push(byte.pair())
+                }
+                (d, Some(Delimiter::ParenRight)) => {
+                    if let Some(Delimiter::ParenRight) = d {
                         delimiter_stack.pop();
                     }
                     if delimiter_stack.is_empty() {
