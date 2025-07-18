@@ -2475,43 +2475,35 @@ pub fn parse_string_interpolation(working_set: &mut StateWorkingSet, span: Span)
 
         if mode == InterpolationMode::Expression {
             let byte = current_byte;
-            if let Some(b'\'') = delimiter_stack.last() {
-                if byte == b'\'' {
-                    delimiter_stack.pop();
-                }
-            } else if let Some(b'"') = delimiter_stack.last() {
-                if byte == b'"' {
-                    delimiter_stack.pop();
-                }
-            } else if let Some(b'`') = delimiter_stack.last() {
-                if byte == b'`' {
-                    delimiter_stack.pop();
-                }
-            } else if byte == b'\'' {
-                delimiter_stack.push(b'\'')
-            } else if byte == b'"' {
-                delimiter_stack.push(b'"');
-            } else if byte == b'`' {
-                delimiter_stack.push(b'`')
-            } else if byte == b'(' {
-                delimiter_stack.push(b')');
-            } else if byte == b')' {
-                if let Some(b')') = delimiter_stack.last() {
-                    delimiter_stack.pop();
-                }
-                if delimiter_stack.is_empty() {
-                    mode = InterpolationMode::String;
-
-                    if token_start < b {
-                        let span = Span::new(token_start, b + 1);
-
-                        let expr = parse_full_cell_path(working_set, None, span);
-                        output.push(expr);
+            match delimiter_stack.last() {
+                Some(&d @ (b'\'' | b'"' | b'`')) => {
+                    if byte == d {
+                        delimiter_stack.pop();
                     }
-
-                    token_start = b + 1;
-                    continue;
                 }
+                _ if byte == b'\'' => delimiter_stack.push(b'\''),
+                _ if byte == b'"' => delimiter_stack.push(b'"'),
+                _ if byte == b'`' => delimiter_stack.push(b'`'),
+                _ if byte == b'(' => delimiter_stack.push(b')'),
+                last if byte == b')' => {
+                    if let Some(b')') = last {
+                        delimiter_stack.pop();
+                    }
+                    if delimiter_stack.is_empty() {
+                        mode = InterpolationMode::String;
+
+                        if token_start < b {
+                            let span = Span::new(token_start, b + 1);
+
+                            let expr = parse_full_cell_path(working_set, None, span);
+                            output.push(expr);
+                        }
+
+                        token_start = b + 1;
+                        continue;
+                    }
+                }
+                _ => (),
             }
         }
         b += 1;
