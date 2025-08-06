@@ -2534,6 +2534,7 @@ fn variables_completions() {
         "temp-dir",
         "user-autoload-dirs",
         "vendor-autoload-dirs",
+        "vendor-lib-dirs",
     ];
 
     // Match results

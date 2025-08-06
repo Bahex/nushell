@@ -203,6 +203,17 @@ pub(crate) fn create_nu_constant(engine_state: &EngineState, span: Span) -> Valu
     );
 
     record.push(
+        "vendor-lib-dirs",
+        Value::list(
+            get_vendor_module_dirs(engine_state)
+                .iter()
+                .map(|path| Value::string(path.to_string_lossy(), span))
+                .collect(),
+            span,
+        ),
+    );
+
+    record.push(
         "vendor-autoload-dirs",
         Value::list(
             get_vendor_autoload_dirs(engine_state)
