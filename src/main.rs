@@ -24,6 +24,7 @@ use nu_path::absolute_with;
 use nu_protocol::{
     ByteStream, Config, IntoValue, PipelineData, ShellError, Span, Spanned, Type, Value,
     engine::{EngineState, Stack},
+    eval_const::get_vendor_module_dirs,
     record, report_shell_error,
 };
 use nu_std::load_standard_library;
@@ -395,7 +396,15 @@ fn main() -> Result<()> {
                 .to_string_lossy()
                 .to_string(),
         ];
-        let all_lib_dirs: Vec<String> = user_lib_dirs.into_iter().chain(default_paths).collect();
+        let all_lib_dirs: Vec<String> = user_lib_dirs
+            .into_iter()
+            .chain(
+                get_vendor_module_dirs(&engine_state)
+                    .iter()
+                    .map(|p| p.to_string_lossy().to_string()),
+            )
+            .chain(default_paths)
+            .collect();
 
         // Convert to Value list for setting env vars and constants
         // No source span — these are startup-computed library directory paths
