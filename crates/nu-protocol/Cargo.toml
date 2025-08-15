@@ -41,7 +41,7 @@ strum = { workspace = true }
 strum_macros = { workspace = true }
 thiserror = { workspace = true }
 typetag = "0.2"
-ecow = { version = "0.2.2", features = ["serde"] }
+ecow = { version = "0.2.6", features = ["serde"] }
 os_pipe = { workspace = true, optional = true, features = ["io_safety"] }
 log = { workspace = true }
 web-time = { workspace = true }
