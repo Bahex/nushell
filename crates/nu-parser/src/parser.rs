@@ -4622,26 +4622,25 @@ pub fn parse_signature_helper(
                         }
                         ParseMode::Type => {
                             if let Some(last) = args.last_mut() {
-                                let (syntax_shape, completer) = if contents.contains(&b'@') {
-                                    let mut split = contents.splitn(2, |b| b == &b'@');
+                                let (syntax_shape, completer) = contents
+                                    .iter()
+                                    .position(|b| *b == b'@')
+                                    .and_then(|idx| {
+                                        let (shape, completer) = contents.split_at_checked(idx)?;
+                                        let (shape_span, completer_span) = span.split_at(idx)?;
 
-                                    let shape_name = split
-                                        .next()
-                                        .expect("If `bytes` contains `@` splitn returns 2 slices");
-                                    let shape_span =
-                                        Span::new(span.start, span.start + shape_name.len());
-                                    let cmd_span =
-                                        Span::new(span.start + shape_name.len() + 1, span.end);
-                                    let cmd_name = split
-                                        .next()
-                                        .expect("If `bytes` contains `@` splitn returns 2 slices");
-                                    (
-                                        parse_shape_name(working_set, shape_name, shape_span),
-                                        parse_completer(working_set, cmd_name, cmd_span),
-                                    )
-                                } else {
-                                    (parse_shape_name(working_set, &contents, span), None)
-                                };
+                                        let completer = completer.strip_prefix(b"@")?;
+                                        let (_, completer_span) = completer_span.split_at(1)?;
+
+                                        Some((
+                                            parse_shape_name(working_set, shape, shape_span),
+                                            parse_completer(working_set, completer, completer_span),
+                                        ))
+                                    })
+                                    .unwrap_or_else(|| {
+                                        (parse_shape_name(working_set, &contents, span), None)
+                                    });
+
                                 //TODO check if we're replacing a custom parameter already
                                 match last {
                                     Arg::Positional {
