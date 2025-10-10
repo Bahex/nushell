@@ -5,13 +5,12 @@ use super::{
 };
 
 /// Result of find_map closure
-#[derive(Default)]
 pub enum FindMapResult<T> {
-    Found(T),
-    #[default]
-    Continue,
-    Stop,
+    Break(Option<T>),
+    Continue(()),
 }
+
+// pub type FindMapResult<T> = std::ops::ControlFlow<Option<T>>;
 
 /// Trait for traversing the AST
 pub trait Traverse {
@@ -196,9 +195,9 @@ impl Traverse for Expression {
     {
         // behavior overridden by f
         match f(self) {
-            FindMapResult::Found(t) => Some(t),
-            FindMapResult::Stop => None,
-            FindMapResult::Continue => {
+            FindMapResult::Break(Some(t)) => Some(t),
+            FindMapResult::Break(None) => None,
+            FindMapResult::Continue(()) => {
                 let recur = |expr: &'a Expression| expr.find_map(working_set, f);
                 match &self.expr {
                     Expr::RowCondition(block_id)

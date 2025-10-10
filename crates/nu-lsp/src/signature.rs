@@ -17,22 +17,23 @@ fn find_active_internal_call<'a>(
     pos: usize,
 ) -> FindMapResult<&'a Call> {
     if !expr.span.contains(pos) {
-        return FindMapResult::Stop;
+        return FindMapResult::Break(None);
     }
     let closure = |e| find_active_internal_call(e, working_set, pos);
     match &expr.expr {
         Expr::Call(call) => {
             if call.head.contains(pos) {
-                return FindMapResult::Stop;
+                return FindMapResult::Break(None);
             }
             call.arguments
                 .iter()
                 .find_map(|arg| arg.expr().and_then(|e| e.find_map(working_set, &closure)))
                 .or(Some(call.as_ref()))
-                .map(FindMapResult::Found)
-                .unwrap_or_default()
+                .map(Some)
+                .map(FindMapResult::Break)
+                .unwrap_or(FindMapResult::Continue(()))
         }
-        _ => FindMapResult::Continue,
+        _ => FindMapResult::Continue(()),
     }
 }
 

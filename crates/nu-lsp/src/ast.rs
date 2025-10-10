@@ -432,42 +432,43 @@ fn find_id_in_expr(
 ) -> FindMapResult<(Id, Span)> {
     // skip the entire expression if the location is not in it
     if !expr.span.contains(*location) {
-        return FindMapResult::Stop;
+        return FindMapResult::Break(None);
     }
     let span = expr.span;
     match &expr.expr {
         Expr::VarDecl(var_id) | Expr::Var(var_id) => {
             let (name, clean_span) = strip_dollar_sign(span, working_set);
-            FindMapResult::Found((Id::Variable(*var_id, name), clean_span))
+            FindMapResult::Break(Some((Id::Variable(*var_id, name), clean_span)))
         }
         Expr::Call(call) => {
             if call.head.contains(*location) {
                 let span = command_name_span_from_call_head(working_set, call.decl_id, call.head);
-                FindMapResult::Found((Id::Declaration(call.decl_id), span))
+                FindMapResult::Break(Some((Id::Declaration(call.decl_id), span)))
             } else {
                 try_find_id_in_misc(call, working_set, Some(location), None)
-                    .map(FindMapResult::Found)
-                    .unwrap_or_default()
+                    .map(Some)
+                    .map(FindMapResult::Break)
+                    .unwrap_or(FindMapResult::Continue(()))
             }
         }
         Expr::ExternalCall(head, _) => {
             if head.span.contains(*location)
                 && let Expr::GlobPattern(cmd, _) = &head.expr
             {
-                return FindMapResult::Found((Id::External(cmd.clone()), head.span));
+                return FindMapResult::Break(Some((Id::External(cmd.clone()), head.span)));
             }
-            FindMapResult::Continue
+            FindMapResult::Continue(())
         }
         Expr::FullCellPath(fcp) => {
             if fcp.head.span.contains(*location) {
-                FindMapResult::Continue
+                FindMapResult::Continue(())
             } else {
                 let Expression {
                     expr: Expr::Var(var_id),
                     ..
                 } = fcp.head
                 else {
-                    return FindMapResult::Continue;
+                    return FindMapResult::Continue(());
                 };
                 let tail: Vec<PathMember> = fcp
                     .tail
@@ -476,13 +477,13 @@ fn find_id_in_expr(
                     .take_while(|pm| pm.span().start <= *location)
                     .collect();
                 let Some(span) = tail.last().map(|pm| pm.span()) else {
-                    return FindMapResult::Stop;
+                    return FindMapResult::Break(None);
                 };
-                FindMapResult::Found((Id::CellPath(var_id, tail), span))
+                FindMapResult::Break(Some((Id::CellPath(var_id, tail), span)))
             }
         }
         Expr::Overlay(Some(module_id)) => {
-            FindMapResult::Found((Id::Module(*module_id, [].into()), span))
+            FindMapResult::Break(Some((Id::Module(*module_id, [].into()), span)))
         }
         // terminal value expressions
         Expr::Bool(_)
@@ -497,8 +498,8 @@ fn find_id_in_expr(
         | Expr::Nothing
         | Expr::RawString(_)
         | Expr::Signature(_)
-        | Expr::String(_) => FindMapResult::Found((Id::Value(expr.ty.clone()), span)),
-        _ => FindMapResult::Continue,
+        | Expr::String(_) => FindMapResult::Break(Some((Id::Value(expr.ty.clone()), span))),
+        _ => FindMapResult::Continue(()),
     }
 }
 

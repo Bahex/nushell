@@ -29,9 +29,10 @@ fn find_pipeline_element_by_position<'a>(
 ) -> FindMapResult<&'a Expression> {
     // skip the entire expression if the position is not in it
     if !expr.span.contains(pos) {
-        return FindMapResult::Stop;
+        return FindMapResult::Break(None);
     }
     let closure = |expr: &'a Expression| find_pipeline_element_by_position(expr, working_set, pos);
+    let found = |x| FindMapResult::Break(Some(x));
     match &expr.expr {
         Expr::RowCondition(block_id)
         | Expr::Subexpression(block_id)
@@ -40,17 +41,15 @@ fn find_pipeline_element_by_position<'a>(
             let block = working_set.get_block(*block_id);
             // check redirection target for sub blocks before diving recursively into them
             check_redirection_in_block(block.as_ref(), pos)
-                .map(FindMapResult::Found)
-                .unwrap_or_default()
+                .map(found)
+                .unwrap_or(FindMapResult::Continue(()))
         }
         Expr::Call(call) => call
             .arguments
             .iter()
             .find_map(|arg| arg.expr().and_then(|e| e.find_map(working_set, &closure)))
-            // if no inner call/external_call found, then this is the inner-most one
-            .or(Some(expr))
-            .map(FindMapResult::Found)
-            .unwrap_or_default(),
+            .map(found)
+            .unwrap_or(found(expr)),
         Expr::ExternalCall(head, arguments) => arguments
             .iter()
             .find_map(|arg| arg.expr().find_map(working_set, &closure))
@@ -66,38 +65,34 @@ fn find_pipeline_element_by_position<'a>(
                     None
                 }
             })
-            .or(Some(expr))
-            .map(FindMapResult::Found)
-            .unwrap_or_default(),
+            .map(found)
+            .unwrap_or(found(expr)),
         // complete the operator
         Expr::BinaryOp(lhs, _, rhs) => lhs
             .find_map(working_set, &closure)
             .or_else(|| rhs.find_map(working_set, &closure))
-            .or(Some(expr))
-            .map(FindMapResult::Found)
-            .unwrap_or_default(),
+            .map(found)
+            .unwrap_or(found(expr)),
         Expr::FullCellPath(fcp) => fcp
             .head
             .find_map(working_set, &closure)
-            .map(FindMapResult::Found)
+            .map(found)
             // e.g. use std/util [<tab>
             .or_else(|| {
                 (fcp.head.span.contains(pos) && matches!(fcp.head.expr, Expr::List(_)))
-                    .then_some(FindMapResult::Continue)
+                    .then_some(FindMapResult::Continue(()))
             })
-            .or(Some(FindMapResult::Found(expr)))
-            .unwrap_or_default(),
-        Expr::Var(_) => FindMapResult::Found(expr),
+            .unwrap_or(found(expr)),
+        Expr::Var(_) => found(expr),
         Expr::AttributeBlock(ab) => ab
             .attributes
             .iter()
             .map(|attr| &attr.expr)
             .chain(Some(ab.item.as_ref()))
             .find_map(|expr| expr.find_map(working_set, &closure))
-            .or(Some(expr))
-            .map(FindMapResult::Found)
-            .unwrap_or_default(),
-        _ => FindMapResult::Continue,
+            .map(found)
+            .unwrap_or(found(expr)),
+        _ => FindMapResult::Continue(()),
     }
 }
 
