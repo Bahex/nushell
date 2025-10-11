@@ -285,7 +285,31 @@ pub(crate) fn create_nu_constant(engine_state: &EngineState, span: Span) -> Valu
 
 /// Generates the list of vendor autoload dirs
 ///
-/// - *macOS only*: `/Library/Application Support/nushell/vendor/autoload`
+/// See [get_vendor_dirs] for details.
+pub fn get_vendor_autoload_dirs(engine_state: &EngineState) -> Vec<PathBuf> {
+    let mut dirs = get_vendor_dirs(engine_state);
+
+    for dir in &mut dirs {
+        dir.push("autoload");
+    }
+
+    let add = [
+        option_env!("NU_VENDOR_AUTOLOAD_DIR").map(PathBuf::from),
+        std::env::var_os("NU_VENDOR_AUTOLOAD_DIR").map(PathBuf::from),
+    ];
+
+    for path in add.into_iter().flatten() {
+        if !dirs.contains(&path) {
+            dirs.push(path)
+        }
+    }
+
+    dirs
+}
+
+/// Generates the list of vendor dirs
+///
+/// - *macOS only*: `/Library/Application Support/nushell/vendor`
 /// - *non-Windows*:
 ///   ```nu
 ///   if $env.XDG_DATA_DIRS? != null {
@@ -304,15 +328,14 @@ pub(crate) fn create_nu_constant(engine_state: &EngineState, span: Span) -> Valu
 ///   }
 ///   | each {|dir| $'($dir)/nushell/vendor' }
 ///   ```
-/// - *Windows only*: `%ProgramData%\nushell\vendor\autoload`
-/// - *compile time*: `$env.NU_VENDOR_AUTOLOAD_DIR` if it is set
-/// - `($nu.data_dir)/vendor/autoload`
-/// - `$env.NU_VENDOR_AUTOLOAD_DIR` if it is set _before_ `nu` is run
-pub fn get_vendor_autoload_dirs(_engine_state: &EngineState) -> Vec<PathBuf> {
-    let into_autoload_path_fn = |mut path: PathBuf| {
+/// - *Windows only*: `%ProgramData%\nushell\vendor`
+/// - *compile time*: `$env.NU_VENDOR_DIR` if it is set
+/// - `($nu.data_dir)/vendor`
+/// - `$env.NU_VENDOR_DIR` if it is set _before_ `nu` is run
+pub fn get_vendor_dirs(_engine_state: &EngineState) -> Vec<PathBuf> {
+    let into_vendor_path_fn = |mut path: PathBuf| {
         path.push("nushell");
         path.push("vendor");
-        path.push("autoload");
         path
     };
 
@@ -327,7 +350,7 @@ pub fn get_vendor_autoload_dirs(_engine_state: &EngineState) -> Vec<PathBuf> {
     #[cfg(target_os = "macos")]
     std::iter::once("/Library/Application Support")
         .map(PathBuf::from)
-        .map(into_autoload_path_fn)
+        .map(into_vendor_path_fn)
         .for_each(&mut append_fn);
     #[cfg(unix)]
     {
@@ -346,7 +369,7 @@ pub fn get_vendor_autoload_dirs(_engine_state: &EngineState) -> Vec<PathBuf> {
             .unwrap_or_else(|| std::ffi::OsString::from("/usr/local/share/:/usr/share/"))
             .as_encoded_bytes()
             .split(|b| *b == b':')
-            .map(|split| into_autoload_path_fn(PathBuf::from(std::ffi::OsStr::from_bytes(split))))
+            .map(|split| into_vendor_path_fn(PathBuf::from(std::ffi::OsStr::from_bytes(split))))
             .rev()
             .for_each(&mut append_fn);
     }
@@ -354,18 +377,18 @@ pub fn get_vendor_autoload_dirs(_engine_state: &EngineState) -> Vec<PathBuf> {
     #[cfg(target_os = "windows")]
     dirs_sys::known_folder(windows_sys::Win32::UI::Shell::FOLDERID_ProgramData)
         .into_iter()
-        .map(into_autoload_path_fn)
+        .map(into_vendor_path_fn)
         .for_each(&mut append_fn);
 
-    if let Some(path) = option_env!("NU_VENDOR_AUTOLOAD_DIR") {
+    if let Some(path) = option_env!("NU_VENDOR_DIR") {
         append_fn(PathBuf::from(path));
     }
 
     if let Some(data_dir) = nu_path::data_dir() {
-        append_fn(into_autoload_path_fn(PathBuf::from(data_dir)));
+        append_fn(into_vendor_path_fn(PathBuf::from(data_dir)));
     }
 
-    if let Some(path) = std::env::var_os("NU_VENDOR_AUTOLOAD_DIR") {
+    if let Some(path) = std::env::var_os("NU_VENDOR_DIR") {
         append_fn(PathBuf::from(path));
     }
 
