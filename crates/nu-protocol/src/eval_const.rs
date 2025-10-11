@@ -307,6 +307,30 @@ pub fn get_vendor_autoload_dirs(engine_state: &EngineState) -> Vec<PathBuf> {
     dirs
 }
 
+/// Generates the list of vendor module dirs
+///
+/// See [get_vendor_dirs] for details.
+pub fn get_vendor_module_dirs(engine_state: &EngineState) -> Vec<PathBuf> {
+    let mut dirs = get_vendor_dirs(engine_state);
+
+    for dir in &mut dirs {
+        dir.push("modules");
+    }
+
+    let add = [
+        option_env!("NU_VENDOR_AUTOLOAD_DIR").map(PathBuf::from),
+        std::env::var_os("NU_VENDOR_AUTOLOAD_DIR").map(PathBuf::from),
+    ];
+
+    for path in add.into_iter().flatten() {
+        if !dirs.contains(&path) {
+            dirs.push(path)
+        }
+    }
+
+    dirs
+}
+
 /// Generates the list of vendor dirs
 ///
 /// - *macOS only*: `/Library/Application Support/nushell/vendor`
