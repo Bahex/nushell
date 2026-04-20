@@ -6,15 +6,12 @@ use crate::completions::{
 use nu_parser::parse;
 use nu_protocol::{
     CommandWideCompleter, Completion, GetSpan, Signature, Span,
-    ast::{
-        Argument, Block, Expr, Expression, FindMapResult, PipelineRedirection, RedirectionTarget,
-        Traverse,
-    },
+    ast::{Argument, Block, Expr, Expression, PipelineRedirection, RedirectionTarget, Traverse},
     engine::{ArgType, EngineState, Stack, StateWorkingSet},
 };
 use reedline::{Completer as ReedlineCompleter, Suggestion};
-use std::borrow::Cow;
 use std::sync::Arc;
+use std::{borrow::Cow, ops::ControlFlow};
 
 use super::{StaticCompletion, custom_completions::CommandWideCompletion};
 
@@ -26,13 +23,13 @@ fn find_pipeline_element_by_position<'a>(
     expr: &'a Expression,
     working_set: &'a StateWorkingSet,
     pos: usize,
-) -> FindMapResult<&'a Expression> {
+) -> ControlFlow<Option<&'a Expression>> {
     // skip the entire expression if the position is not in it
     if !expr.span.contains(pos) {
-        return FindMapResult::Break(None);
+        return ControlFlow::Break(None);
     }
     let closure = |expr: &'a Expression| find_pipeline_element_by_position(expr, working_set, pos);
-    let found = |x| FindMapResult::Break(Some(x));
+    let found = |x| ControlFlow::Break(Some(x));
     match &expr.expr {
         Expr::RowCondition(block_id)
         | Expr::Subexpression(block_id)
@@ -42,7 +39,7 @@ fn find_pipeline_element_by_position<'a>(
             // check redirection target for sub blocks before diving recursively into them
             check_redirection_in_block(block.as_ref(), pos)
                 .map(found)
-                .unwrap_or(FindMapResult::Continue(()))
+                .unwrap_or(ControlFlow::Continue(()))
         }
         Expr::Call(call) => call
             .arguments
@@ -80,7 +77,7 @@ fn find_pipeline_element_by_position<'a>(
             // e.g. use std/util [<tab>
             .or_else(|| {
                 (fcp.head.span.contains(pos) && matches!(fcp.head.expr, Expr::List(_)))
-                    .then_some(FindMapResult::Continue(()))
+                    .then_some(ControlFlow::Continue(()))
             })
             .unwrap_or(found(expr)),
         Expr::Var(_) => found(expr),
@@ -92,7 +89,7 @@ fn find_pipeline_element_by_position<'a>(
             .find_map(|expr| expr.find_map(working_set, &closure))
             .map(found)
             .unwrap_or(found(expr)),
-        _ => FindMapResult::Continue(()),
+        _ => ControlFlow::Continue(()),
     }
 }
 
