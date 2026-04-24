@@ -4,7 +4,7 @@ use std::{
     time::Duration,
 };
 
-use itertools::{Either, Itertools};
+use itertools::Either;
 use notify_debouncer_full::{
     DebouncedEvent, Debouncer, FileIdMap, new_debouncer,
     notify::{
@@ -275,39 +275,36 @@ struct WatchEvent {
 impl TryFrom<DebouncedEvent> for WatchEvent {
     type Error = ();
 
-    fn try_from(mut ev: DebouncedEvent) -> Result<Self, Self::Error> {
+    fn try_from(ev: DebouncedEvent) -> Result<Self, Self::Error> {
         // TODO: Maybe we should handle all event kinds?
-        match ev.event.kind {
-            EventKind::Create(_) => ev.paths.pop().map(|p| WatchEvent {
-                operation: "Create",
-                path: p,
-                new_path: None,
-            }),
-            EventKind::Remove(_) => ev.paths.pop().map(|p| WatchEvent {
-                operation: "Remove",
-                path: p,
-                new_path: None,
-            }),
+        let DebouncedEvent {
+            event: notify::Event {
+                kind, mut paths, ..
+            },
+            ..
+        } = ev;
+
+        let (path, new_path) = match paths.as_mut_slice() {
+            [path] => (std::mem::take(path), None),
+            [path, new_path] => (std::mem::take(path), Some(std::mem::take(new_path))),
+            _ => return Err(()),
+        };
+
+        let operation = match kind {
+            EventKind::Create(_) => "Create",
+            EventKind::Remove(_) => "Remove",
             EventKind::Modify(
                 ModifyKind::Data(DataChange::Content | DataChange::Any) | ModifyKind::Any,
-            ) => ev.paths.pop().map(|p| WatchEvent {
-                operation: "Write",
-                path: p,
-                new_path: None,
-            }),
-            EventKind::Modify(ModifyKind::Name(RenameMode::Both)) => ev
-                .paths
-                .drain(..)
-                .rev()
-                .next_array()
-                .map(|[from, to]| WatchEvent {
-                    operation: "Rename",
-                    path: from,
-                    new_path: Some(to),
-                }),
-            _ => None,
-        }
-        .ok_or(())
+            ) => "Write",
+            EventKind::Modify(ModifyKind::Name(RenameMode::Both)) => "Rename",
+            _ => return Err(()),
+        };
+
+        Ok(WatchEvent {
+            operation,
+            path,
+            new_path,
+        })
     }
 }
 
