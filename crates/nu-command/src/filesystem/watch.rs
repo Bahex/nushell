@@ -1,5 +1,4 @@
 use std::{
-    borrow::Cow,
     path::{Path, PathBuf},
     sync::mpsc::{Receiver, RecvTimeoutError, channel},
     time::Duration,
@@ -219,8 +218,10 @@ impl Command for Watch {
                     Err(err) => Either::Left(std::iter::once(Err(err))),
                 })
                 .filter_map(move |e| match e {
-                    Ok(ev) => glob_filter(glob_pattern.as_ref(), &ev.path)
-                        .then(|| WatchEventRecord::from(&ev).into_value(head)),
+                    Ok(ev) if glob_filter(glob_pattern.as_ref(), &ev.path) => {
+                        Some(ev.into_value(head))
+                    }
+                    Ok(_) => None,
                     Err(err) => Some(Value::error(err, head)),
                 })
                 .into_pipeline_data(head, engine_state.signals().clone());
@@ -264,27 +265,11 @@ impl Command for Watch {
     }
 }
 
+#[derive(IntoValue)]
 struct WatchEvent {
     operation: &'static str,
     path: PathBuf,
     new_path: Option<PathBuf>,
-}
-
-#[derive(IntoValue)]
-struct WatchEventRecord<'a> {
-    operation: &'static str,
-    path: Cow<'a, str>,
-    new_path: Option<Cow<'a, str>>,
-}
-
-impl<'a> From<&'a WatchEvent> for WatchEventRecord<'a> {
-    fn from(value: &'a WatchEvent) -> Self {
-        Self {
-            operation: value.operation,
-            path: value.path.to_string_lossy(),
-            new_path: value.new_path.as_deref().map(Path::to_string_lossy),
-        }
-    }
 }
 
 impl TryFrom<DebouncedEvent> for WatchEvent {
