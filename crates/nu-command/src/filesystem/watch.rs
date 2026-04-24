@@ -1,3 +1,10 @@
+use std::{
+    borrow::Cow,
+    path::{Path, PathBuf},
+    sync::mpsc::{Receiver, RecvTimeoutError, channel},
+    time::Duration,
+};
+
 use itertools::{Either, Itertools};
 use notify_debouncer_full::{
     DebouncedEvent, Debouncer, FileIdMap, new_debouncer,
@@ -6,17 +13,11 @@ use notify_debouncer_full::{
         event::{DataChange, ModifyKind, RenameMode},
     },
 };
+
 use nu_engine::{ClosureEval, command_prelude::*};
 use nu_protocol::{
     Signals, engine::Closure, report_shell_error, shell_error::generic::GenericError,
     shell_error::io::IoError,
-};
-
-use std::{
-    borrow::Cow,
-    path::{Path, PathBuf},
-    sync::mpsc::{Receiver, RecvTimeoutError, channel},
-    time::Duration,
 };
 
 // durations chosen mostly arbitrarily
