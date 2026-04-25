@@ -1,5 +1,41 @@
+use std::time::Duration;
+
+use rstest::rstest;
+
 use nu_protocol::test_table;
 use nu_test_support::{fs::Stub, prelude::*};
+
+const STREAM_TIMEOUT: &str = r#"
+    # cut off the input stream after `$duration`
+    def stream-timeout [wait: duration]: list -> list {
+        wrap item
+        | append {stop: true}
+        | interleave {
+            generate {|d|
+                sleep $d
+                {out: {stop: true}}
+            } $wait
+        }
+        | take while { $in has "item" }
+        | get item
+    }
+"#;
+
+#[rstest]
+#[case::within_time(Duration::ZERO, [0, 1, 2, 3, 4])]
+#[case::timed_out(Duration::from_millis(10), [0, 1])]
+fn stream_timeout(#[case] delay: Duration, #[case] expected: impl IntoValue) -> Result {
+    let mut tester = test();
+    let () = tester.run(STREAM_TIMEOUT)?;
+    let () = tester.run_with_data("let delay = $in", delay)?;
+
+    let code = "
+        0..<5
+        | each { sleep $delay; $in }
+        | stream-timeout 25ms
+    ";
+    tester.run(code).expect_value_eq(expected)
+}
 
 #[test]
 fn watch_stream() -> Result {
@@ -15,7 +51,7 @@ fn watch_stream() -> Result {
                 {|| rm bar.txt }
             ]
             | each {|fn| null; do $fn; {}}
-            | zip { watch . --quiet }
+            | zip { watch . --quiet | stream-timeout 2sec }
             | each { into record }
         "#;
 
@@ -27,7 +63,9 @@ fn watch_stream() -> Result {
             [   "Remove", bar_txt,         ()],
         ];
 
-        test().cwd(dirs.test()).run(code).expect_value_eq(expected)
+        let mut tester = test().cwd(dirs.test());
+        let () = tester.run(STREAM_TIMEOUT)?;
+        tester.run(code).expect_value_eq(expected)
     })
 }
 
@@ -49,7 +87,7 @@ fn watch_stream_outside() -> Result {
                 {|| mv foo.txt ../ }
             ]
             | each {|fn| null; do $fn; {}}
-            | zip { watch . --quiet }
+            | zip { watch . --quiet | stream-timeout 2sec }
             | each { into record }
         ";
 
@@ -59,9 +97,8 @@ fn watch_stream_outside() -> Result {
             [   "Rename", foo_txt,         ()],
         ];
 
-        test()
-            .cwd(dirs.test().join("watched_dir"))
-            .run(code)
-            .expect_value_eq(expected)
+        let mut tester = test().cwd(dirs.test().join("watched_dir"));
+        let () = tester.run(STREAM_TIMEOUT)?;
+        tester.run(code).expect_value_eq(expected)
     })
 }
