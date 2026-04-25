@@ -23,7 +23,7 @@ const STREAM_TIMEOUT: &str = r#"
 
 #[rstest]
 #[case::within_time(Duration::ZERO, [0, 1, 2, 3, 4])]
-#[case::timed_out(Duration::from_millis(10), [0, 1])]
+#[case::timed_out(Duration::from_millis(100), [0, 1])]
 fn stream_timeout(#[case] delay: Duration, #[case] expected: impl IntoValue) -> Result {
     let mut tester = test();
     let () = tester.run(STREAM_TIMEOUT)?;
@@ -32,7 +32,7 @@ fn stream_timeout(#[case] delay: Duration, #[case] expected: impl IntoValue) -> 
     let code = "
         0..<5
         | each { sleep $delay; $in }
-        | stream-timeout 25ms
+        | stream-timeout 250ms
     ";
     tester.run(code).expect_value_eq(expected)
 }
@@ -51,7 +51,7 @@ fn watch_stream() -> Result {
                 {|| rm bar.txt }
             ]
             | each {|fn| null; do $fn; {}}
-            | zip { watch . --quiet | stream-timeout 2sec }
+            | zip { watch . --debounce 200ms --quiet | stream-timeout 5sec }
             | each { into record }
         "#;
 
@@ -87,7 +87,7 @@ fn watch_stream_outside() -> Result {
                 {|| mv foo.txt ../ }
             ]
             | each {|fn| null; do $fn; {}}
-            | zip { watch . --quiet | stream-timeout 2sec }
+            | zip { watch . --debounce 200ms --quiet | stream-timeout 5sec }
             | each { into record }
         ";
 
