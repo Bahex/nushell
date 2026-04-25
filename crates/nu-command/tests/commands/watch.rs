@@ -24,6 +24,10 @@ const STREAM_TIMEOUT: &str = r#"
 #[rstest]
 #[case::within_time(Duration::ZERO, [0, 1, 2, 3, 4])]
 #[case::timed_out(Duration::from_millis(100), [0, 1])]
+#[cfg_attr(
+    target_os = "macos",
+    ignore = "anything involving timing is unreliable on macos in CI"
+)]
 fn stream_timeout(#[case] delay: Duration, #[case] expected: impl IntoValue) -> Result {
     let mut tester = test();
     let () = tester.run(STREAM_TIMEOUT)?;
@@ -38,6 +42,10 @@ fn stream_timeout(#[case] delay: Duration, #[case] expected: impl IntoValue) -> 
 }
 
 #[test]
+#[cfg_attr(
+    target_os = "macos",
+    ignore = "file operations or anything involving timing is unreliable on macos in CI"
+)]
 fn watch_stream() -> Result {
     Playground::setup("streaming_watch_fs", |dirs, _| {
         let foo_txt = &*dirs.test().join("foo.txt");
@@ -55,11 +63,22 @@ fn watch_stream() -> Result {
             | each { into record }
         "#;
 
+        #[cfg(not(target_os = "macos"))]
         let expected = test_table![
             ["operation",  "path", "new_path"];
             [   "Create", foo_txt,         ()],
             [    "Write", foo_txt,         ()],
             [   "Rename", foo_txt,    bar_txt],
+            [   "Remove", bar_txt,         ()],
+        ];
+
+        // https://github.com/notify-rs/notify/issues/900
+        #[cfg(target_os = "macos")]
+        let expected = test_table![
+            ["operation",  "path", "new_path"];
+            [   "Create", foo_txt,         ()],
+            [   "Create", foo_txt,         ()],
+            [   "Create", bar_txt,         ()],
             [   "Remove", bar_txt,         ()],
         ];
 
@@ -70,8 +89,12 @@ fn watch_stream() -> Result {
 }
 
 #[test]
+#[cfg_attr(
+    target_os = "macos",
+    ignore = "file operations that involve paths outside the watched directory do not work properly on macos"
+)]
 fn watch_stream_outside() -> Result {
-    Playground::setup("streaming_watch_fs", |dirs, sandbox| {
+    Playground::setup("streaming_watch_fs_outside_watched_dir", |dirs, sandbox| {
         sandbox
             .mkdir("watched_dir")
             .with_files(&[Stub::EmptyFile("foo.txt")]);
