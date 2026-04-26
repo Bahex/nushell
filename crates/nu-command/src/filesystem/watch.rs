@@ -262,9 +262,36 @@ impl Command for Watch {
 
 #[derive(IntoValue)]
 struct WatchEvent {
-    operation: &'static str,
+    operation: WatchEventKind,
     path: Option<PathBuf>,
     new_path: Option<PathBuf>,
+}
+
+#[derive(IntoValue)]
+#[nu_value(rename_all = "UpperCamelCase")]
+enum WatchEventKind {
+    Create,
+    Write,
+    Rename,
+    Remove,
+}
+
+impl TryFrom<EventKind> for WatchEventKind {
+    type Error = ();
+
+    fn try_from(value: EventKind) -> Result<Self, Self::Error> {
+        Ok(match value {
+            EventKind::Create(_) => Self::Create,
+            EventKind::Remove(_) => Self::Remove,
+            EventKind::Modify(
+                ModifyKind::Data(DataChange::Content | DataChange::Any) | ModifyKind::Any,
+            ) => Self::Write,
+            EventKind::Modify(ModifyKind::Name(
+                RenameMode::Both | RenameMode::From | RenameMode::To,
+            )) => Self::Rename,
+            _ => return Err(()),
+        })
+    }
 }
 
 impl TryFrom<DebouncedEvent> for WatchEvent {
@@ -285,28 +312,19 @@ impl TryFrom<DebouncedEvent> for WatchEvent {
             _ => return Err(()),
         };
 
-        let operation = match kind {
-            EventKind::Create(_) => "Create",
-            EventKind::Remove(_) => "Remove",
-            EventKind::Modify(
-                ModifyKind::Data(DataChange::Content | DataChange::Any) | ModifyKind::Any,
-            ) => "Write",
-            EventKind::Modify(ModifyKind::Name(RenameMode::Both | RenameMode::From)) => "Rename",
-            EventKind::Modify(ModifyKind::Name(RenameMode::To)) => {
-                return Ok(WatchEvent {
-                    operation: "Rename",
-                    path: None,
-                    new_path: Some(path),
-                });
-            }
-            _ => return Err(()),
-        };
-
-        Ok(WatchEvent {
-            operation,
-            path: Some(path),
-            new_path,
-        })
+        if let EventKind::Modify(ModifyKind::Name(RenameMode::To)) = kind {
+            Ok(WatchEvent {
+                operation: WatchEventKind::Rename,
+                path: None,
+                new_path: Some(path),
+            })
+        } else {
+            Ok(WatchEvent {
+                operation: kind.try_into()?,
+                path: Some(path),
+                new_path,
+            })
+        }
     }
 }
 
