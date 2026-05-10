@@ -1,6 +1,7 @@
 def cell-path-join []: list<cell-path> -> cell-path {
-    each {|e| try { split cell-path } catch { $e } }
-    | flatten
+    each --flatten {|e|
+        try { split cell-path } catch { [$e] }
+    }
     | into cell-path
 }
 
@@ -9,25 +10,136 @@ def add-parent [parent: cell-path]: table<path: cell-path> -> table<path: cell-p
 }
 
 def get-children []: [any -> table<path: cell-path, item: any>] {
-    let val = $in
-    match ($val | describe --detailed).type {
-        "record" => { $val | transpose path item }
-        "list" => { $val | enumerate | rename path item }
+    match $in {
+        {} => { transpose path item }
+        [..] => { enumerate | rename path item }
         _ => { return [] }
     }
 }
 
-def get-children-at [path: cell-path]: [any -> table<path: cell-path, item: any>] {
-    let x = try { get $path } catch { return [] }
-
-    if ($x | describe --detailed).type == "list" {
-        $x | get-children | add-parent $path
-    } else {
-        [{
-            path: $path
-            item: $x
-        }]
+def get-children-at [path: cell-path ...paths: cell-path]: [any -> table<path: cell-path, item: any>] {
+    match $in {
+        {} => {
+            get -o $path ...$paths $.""
+            | zip [$path ...$paths]
+            | each --flatten {|e|
+                match $e.0 {
+                    null | [] => []
+                    [..] => {
+                        $e.0 | get-children | add-parent $e.1
+                    }
+                    $x => [{path: $e.1, item: $x}]
+                }
+            }
+        }
+        _ => { get-children }
     }
+}
+
+def make-descend-fn [arg, rest] {
+    let arg_type = match ($arg.item | describe --detailed).type {
+        "string" | "int" => "cell-path",
+        $x => $x,
+    }
+    match [$arg_type, $rest.item] {
+        ["nothing", []] => {
+            {|| get-children }
+        }
+        ["cell-path", []] => {
+            {|| get-children-at $arg.item }
+        }
+        ["cell-path", _] => {
+            let labels = $rest.item | each {|e|
+                let md = metadata
+                match ($e | describe) {
+                    "cell-path" | "string" | "int" => { }
+                    $type => {
+                        {
+                            span: $md.span
+                            text: $'expected cell-path, got ($type)'
+                        }
+                    }
+                }
+            }
+            if $labels != [] {
+                error make {
+                    msg: "Type mismatch"
+                    labels: $labels
+                }
+            }
+            {|| get-children-at $arg.item ...$rest.item }
+        }
+        ["closure", []] => {
+            {|parent|
+                let output = try {
+                    $parent | do $arg.item $parent
+                } catch {
+                    return []
+                }
+                | append []
+
+                let has_item = try { $output | get item; true } catch { false }
+
+                $output
+                | if not $has_item { wrap item } else { }
+                | default "<closure>" path
+            }
+        }
+        ["closure", _] => {
+            error make {
+                msg: "Closure accessor can't be combined with other accessors."
+                labels: [
+                    {
+                        text: "closure",
+                        span: $arg.span
+                    }
+                    {
+                        text: "additional accessors not allowed",
+                        span: $rest.span
+                    }
+                ]
+                help: "Remove the additional accessors, or modify the closure to access the same values."
+            }
+        }
+        [$type, _] => {
+            error make {
+                msg: "Type mismatch."
+                labels: [
+                    {
+                        text: $"Cannot get child values using a ($type)"
+                        span: $arg.span
+                    }
+                ]
+                help: "Try using a cell-path or a closure."
+            }
+        }
+    }
+}
+
+def make-depth-first-fn [descend: closure]: nothing -> closure {
+    {|stack| match $stack {
+        [] => { {} }
+        [$head, ..$tail] => {
+            let children = $head.item | do $descend $head.item | add-parent $head.path
+            {
+                out: $head,
+                next: ($children ++ $tail),
+            }
+        }
+    }}
+}
+
+def make-breadth-first-fn [descend: closure]: nothing -> closure {
+    {|queue| match $queue {
+        [] => { {} }
+        [$head, ..$tail] => {
+            let children = $head.item | do $descend $head.item | add-parent $head.path
+            {
+                out: $head,
+                next: ($tail ++ $children),
+            }
+        }
+    }}
 }
 
 # Recursively descend a nested value, returning each value along with its path.
@@ -105,72 +217,29 @@ def get-children-at [path: cell-path]: [any -> table<path: cell-path, item: any>
 ]
 @search-terms jq ".." nested
 export def recurse [
-    get_children?: oneof<cell-path, closure> # Specify how to get children from parent value.
+    accessor?: oneof<cell-path, closure> # Specify how to get children from parent value.
+    ...rest: cell-path # additional cell-paths (can't be combined with closure `accessor`)
     --depth-first # Descend depth-first rather than breadth first
 ]: [any -> list<any>] {
-    let descend = match ($get_children | describe --detailed).type {
-        "nothing" => {
-            {|| get-children }
-        }
-        "cell-path" | "string" | "int" => {
-            {|| get-children-at $get_children }
-        }
-        "closure" => {
-            {|parent|
-                let output = try {
-                    $parent | do $get_children $parent
-                } catch {
-                    return []
-                }
-                | append []
-                let has_item = try { $output | get item; true } catch { false }
+    let root = $in
 
-                $output
-                | if not $has_item { wrap item } else { }
-                | default "<closure>" path
-            }
-        }
-        $type => {
-            error make {
-                msg: "Type mismatch."
-                label: {
-                    text: $"Cannot get child values using a ($type)"
-                    span: (metadata $get_children).span
-                }
-                help: "Try using a cell-path or a closure."
-            }
-        }
+    let spanned_accessor = {
+        item: $accessor
+        span: (metadata $accessor).span
     }
+    let spanned_rest = {
+        item: $rest
+        span: (metadata $rest).span
+    }
+    let descend = make-descend-fn $spanned_accessor $spanned_rest
 
     let fn = if $depth_first {
-        {|stack|
-            match $stack {
-                [] => { {} }
-                [$head, ..$tail] => {
-                    let children = $head.item | do $descend $head.item | add-parent $head.path
-                    {
-                        out: $head,
-                        next: ($tail | prepend $children),
-                    }
-                }
-            }
-        }
+        make-depth-first-fn $descend
     } else {
-        {|out|
-            let children = $out
-            | each {|e| $e.item | do $descend $e.item | add-parent $e.path }
-            | flatten
-
-            if ($children | is-not-empty) {
-                {out: $out, next: $children}
-            } else {
-                {out: $out}
-            }
-        }
+        make-breadth-first-fn $descend
     }
 
-    generate $fn [{path: ($.), item: ($in) }]
-    | if not $depth_first { flatten } else { }
+    generate $fn [{path: ($.), item: $root }]
 }
 
 # Helper for `only` errors
