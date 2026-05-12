@@ -83,9 +83,20 @@ impl Command for Window {
     ) -> Result<PipelineData, ShellError> {
         let input = input.into_stream_or_original(engine_state);
         let head = call.head;
-        let size: NonZeroUsize = call.req(engine_state, stack, 0)?;
+
+        let fix_call_span = |err: ShellError| match err {
+            ShellError::IncorrectValue { msg, val_span, .. } => ShellError::IncorrectValue {
+                msg,
+                val_span,
+                call_span: call.head,
+            },
+            _ => err,
+        };
+
+        let size: NonZeroUsize = call.req(engine_state, stack, 0).map_err(fix_call_span)?;
         let stride: NonZeroUsize = call
-            .get_flag(engine_state, stack, "stride")?
+            .get_flag(engine_state, stack, "stride")
+            .map_err(fix_call_span)?
             .unwrap_or(NonZeroUsize::MIN);
         let remainder = call.has_flag(engine_state, stack, "remainder")?;
 
