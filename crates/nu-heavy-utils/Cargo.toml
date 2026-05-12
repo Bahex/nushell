@@ -16,11 +16,6 @@ harness = false
 [lints]
 workspace = true
 
-[[test]]
-name = "tests"
-path = "tests/main.rs"
-harness = false
-
 [dependencies]
 nu-protocol = { path = "../nu-protocol", version = "0.112.3", default-features = false }
 
