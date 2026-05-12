@@ -4731,6 +4731,7 @@ name = "nu-heavy-utils"
 version = "0.112.3"
 dependencies = [
  "nu-protocol",
+ "nu-test-support",
 ]
 
 [[package]]
