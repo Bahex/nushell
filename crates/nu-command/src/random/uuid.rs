@@ -64,7 +64,15 @@ impl Command for RandomUuid {
         call: &Call,
         _input: PipelineData,
     ) -> Result<PipelineData, ShellError> {
-        uuid(engine_state, stack, call)
+        let fix_call_span = |err: ShellError| match err {
+            ShellError::IncorrectValue { msg, val_span, .. } => ShellError::IncorrectValue {
+                msg,
+                val_span,
+                call_span: call.head,
+            },
+            _ => err,
+        };
+        uuid(engine_state, stack, call).map_err(fix_call_span)
     }
 
     fn examples(&self) -> Vec<Example<'_>> {
