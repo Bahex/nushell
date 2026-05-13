@@ -529,6 +529,8 @@ fn loop_iteration(ctx: LoopContext) -> (bool, Stack, Reedline) {
 
     perf!("update_prompt", start_time, use_color);
 
+    line_editor = flush_engine_state_repl_buffer(engine_state, line_editor);
+
     *entry_num += 1;
 
     start_time = Instant::now();
