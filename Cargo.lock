@@ -4475,6 +4475,7 @@ dependencies = [
  "nu-cmd-lang",
  "nu-command",
  "nu-engine",
+ "nu-heavy-utils",
  "nu-json",
  "nu-parser",
  "nu-pretty-hex",
@@ -4586,6 +4587,7 @@ dependencies = [
  "nu-engine",
  "nu-experimental",
  "nu-glob",
+ "nu-heavy-utils",
  "nu-json",
  "nu-parser",
  "nu-path",
@@ -4724,6 +4726,14 @@ name = "nu-glob"
 version = "0.112.3"
 dependencies = [
  "doc-comment",
+]
+
+[[package]]
+name = "nu-heavy-utils"
+version = "0.112.3"
+dependencies = [
+ "nu-protocol",
+ "nu-test-support",
 ]
 
 [[package]]
