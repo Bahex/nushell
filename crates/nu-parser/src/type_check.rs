@@ -806,8 +806,10 @@ pub fn check_pipeline_type(
             continue;
         }
 
-        let decl = working_set.get_decl(call.decl_id);
-        let io_types = decl.signature().input_output_types;
+        let io_types = working_set
+            .get_decl(call.decl_id)
+            .signature()
+            .input_output_types;
 
         if io_types.is_empty() {
             output_types.push(Type::Any);
