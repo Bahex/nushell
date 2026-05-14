@@ -2097,9 +2097,7 @@ pub fn parse_range(working_set: &mut StateWorkingSet, span: Span) -> Option<Expr
 
     let contents = working_set.get_span_contents(span);
 
-    let token = if let Ok(s) = String::from_utf8(contents.into()) {
-        s
-    } else {
+    let Ok(token) = String::from_utf8(contents.into()) else {
         working_set.error(ParseError::NonUtf8(span));
         return None;
     };
@@ -2122,12 +2120,10 @@ pub fn parse_range(working_set: &mut StateWorkingSet, span: Span) -> Option<Expr
         .filter_map(|(pos, _)| {
             // paren_depth = count of unclosed parens prior to pos
             let before = &token[..pos];
-            let paren_depth = before
-                .chars()
-                .filter(|&c| c == '(')
-                .count()
-                .checked_sub(before.chars().filter(|&c| c == ')').count());
-            paren_depth.and_then(|d| (d == 0).then_some(pos))
+            let paren_opened = before.chars().filter(|&c| c == '(').count();
+            let paren_closed = before.chars().filter(|&c| c == ')').count();
+            let paren_depth = paren_opened.checked_sub(paren_closed)?;
+            (paren_depth == 0).then_some(pos)
         })
         .collect();
 
