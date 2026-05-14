@@ -3338,7 +3338,6 @@ mod input_types {
         "#,
         false
     )]
-    #[ignore]
     #[case::multiple_output_command_to_variable_not_any(
         br#"
             def str-or-int []: [nothing -> int, nothing -> string] { if (random bool) { 42 } else { "hello" } }
