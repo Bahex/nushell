@@ -808,6 +808,12 @@ pub fn check_pipeline_type(
 
         let decl = working_set.get_decl(call.decl_id);
         let io_types = decl.signature().input_output_types;
+
+        if io_types.is_empty() {
+            output_types.push(Type::Any);
+            continue;
+        }
+
         if output_types.contains(&Type::Any) {
             // if input type is any, then output type could be any of the valid output types
             output_types.extend(io_types.into_iter().map(|(_, out_type)| out_type));
@@ -824,11 +830,6 @@ pub fn check_pipeline_type(
         }
 
         if !output_types.is_empty() {
-            continue;
-        }
-
-        if decl.signature().input_output_types.is_empty() {
-            output_types.push(Type::Any);
             continue;
         }
 
