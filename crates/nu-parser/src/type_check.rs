@@ -795,56 +795,56 @@ pub fn check_pipeline_type(
             output_types.push(Type::Any);
             continue;
         }
-        if let Expr::Call(call) = &elem.expr.expr {
-            // Dynamic percent dispatch uses a placeholder decl_id that is rewritten later in IR.
-            // Defer type constraints for this call at parse/type-check time.
-            if call.parser_info.contains_key("percent_forced_builtin") {
-                output_types.push(Type::Any);
-                continue;
-            }
+        let Expr::Call(call) = &elem.expr.expr else {
+            output_types.push(elem.expr.ty.clone());
+            continue;
+        };
+        // Dynamic percent dispatch uses a placeholder decl_id that is rewritten later in IR.
+        // Defer type constraints for this call at parse/type-check time.
+        if call.parser_info.contains_key("percent_forced_builtin") {
+            output_types.push(Type::Any);
+            continue;
+        }
 
-            let decl = working_set.get_decl(call.decl_id);
-            let io_types = decl.signature().input_output_types;
-            if output_types.contains(&Type::Any) {
-                // if input type is any, then output type could be any of the valid output types
-                output_types.extend(io_types.into_iter().map(|(_, out_type)| out_type));
-            } else {
-                // any current type which matches an input type is a possible output type
-                output_types.extend(
-                    io_types
-                        .into_iter()
-                        .filter(|(in_type, _)| {
-                            input_types.iter().any(|ty| type_compatible(in_type, ty))
-                        })
-                        .map(|(_, out_type)| out_type),
-                );
-            }
+        let decl = working_set.get_decl(call.decl_id);
+        let io_types = decl.signature().input_output_types;
+        if output_types.contains(&Type::Any) {
+            // if input type is any, then output type could be any of the valid output types
+            output_types.extend(io_types.into_iter().map(|(_, out_type)| out_type));
+        } else {
+            // any current type which matches an input type is a possible output type
+            output_types.extend(
+                io_types
+                    .into_iter()
+                    .filter(|(in_type, _)| {
+                        input_types.iter().any(|ty| type_compatible(in_type, ty))
+                    })
+                    .map(|(_, out_type)| out_type),
+            );
+        }
 
-            if !output_types.is_empty() {
-                continue;
-            }
+        if !output_types.is_empty() {
+            continue;
+        }
 
-            if decl.signature().input_output_types.is_empty() {
-                output_types.push(Type::Any);
-                continue;
-            }
+        if decl.signature().input_output_types.is_empty() {
+            output_types.push(Type::Any);
+            continue;
+        }
 
-            let Some(types_string) = combined_type_string(input_types, "or") else {
-                output_errors
-                    .get_or_insert_default()
-                    .push(ParseError::InternalError(
-                        "Pipeline has no type at this point".to_string(),
-                        elem.expr.span,
-                    ));
-                continue;
-            };
-
+        let Some(types_string) = combined_type_string(input_types, "or") else {
             output_errors
                 .get_or_insert_default()
-                .push(ParseError::InputMismatch(types_string, call.head));
-        } else {
-            output_types.push(elem.expr.ty.clone());
-        }
+                .push(ParseError::InternalError(
+                    "Pipeline has no type at this point".to_string(),
+                    elem.expr.span,
+                ));
+            continue;
+        };
+
+        output_errors
+            .get_or_insert_default()
+            .push(ParseError::InputMismatch(types_string, call.head));
     }
 
     (output_types, output_errors)
