@@ -788,6 +788,8 @@ pub fn check_pipeline_type(
         output_types.clear();
         input_types.sort();
         input_types.dedup();
+        // Should be immutable from this point forward
+        let input_types = input_types.as_slice();
 
         if elem.redirection.is_some() {
             output_types.push(Type::Any);
@@ -827,7 +829,7 @@ pub fn check_pipeline_type(
                 continue;
             }
 
-            let Some(types_string) = combined_type_string(&input_types, "or") else {
+            let Some(types_string) = combined_type_string(input_types, "or") else {
                 output_errors
                     .get_or_insert_default()
                     .push(ParseError::InternalError(
