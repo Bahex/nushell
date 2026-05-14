@@ -850,22 +850,22 @@ pub fn check_block_input_output(working_set: &StateWorkingSet, block: &Block) ->
     let mut output_errors = vec![];
 
     for (input_type, output_type) in &block.signature.input_output_types {
-        let mut current_type = input_type.clone();
-        let mut current_output_types = vec![];
-
-        for pipeline in &block.pipelines {
-            let (checked_output_types, err) =
-                check_pipeline_type(working_set, pipeline, current_type);
-            current_output_types = checked_output_types;
-            current_type = Type::Nothing;
-            if let Some(err) = err {
-                output_errors.extend_from_slice(&err);
+        let current_output_types = match block.pipelines.as_slice() {
+            [] => vec![Type::Nothing],
+            pipelines => {
+                pipelines
+                    .iter()
+                    .fold((input_type.clone(), vec![]), |(ct, _cots), pipeline| {
+                        let (checked_output_types, err) =
+                            check_pipeline_type(working_set, pipeline, ct);
+                        if let Some(err) = err {
+                            output_errors.extend(err);
+                        }
+                        (Type::Nothing, checked_output_types)
+                    })
+                    .1
             }
-        }
-
-        if block.pipelines.is_empty() {
-            current_output_types = vec![Type::Nothing];
-        }
+        };
 
         if output_type == &Type::Any || current_output_types.contains(&Type::Any) {
             continue;
