@@ -816,7 +816,7 @@ pub fn check_pipeline_type(
             continue;
         }
 
-        if output_types.contains(&Type::Any) {
+        if input_types.contains(&Type::Any) {
             // if input type is any, then output type could be any of the valid output types
             output_types.extend(io_types.into_iter().map(|(_, out_type)| out_type));
         } else {
