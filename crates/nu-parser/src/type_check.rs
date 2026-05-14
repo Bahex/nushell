@@ -777,54 +777,54 @@ pub fn check_pipeline_type(
     pipeline: &Pipeline,
     input_type: Type,
 ) -> (Vec<Type>, Option<Vec<ParseError>>) {
-    let mut current_types: Vec<Type>;
-    let mut new_types: Vec<Type> = vec![input_type];
+    let mut input_types: Vec<Type>;
+    let mut output_types: Vec<Type> = vec![input_type];
 
     let mut output_errors: Option<Vec<ParseError>> = None;
 
     for elem in &pipeline.elements {
-        current_types = std::mem::take(&mut new_types);
-        current_types.sort();
-        current_types.dedup();
+        input_types = std::mem::take(&mut output_types);
+        input_types.sort();
+        input_types.dedup();
 
         if elem.redirection.is_some() {
-            new_types = vec![Type::Any];
+            output_types = vec![Type::Any];
             continue;
         }
         if let Expr::Call(call) = &elem.expr.expr {
             // Dynamic percent dispatch uses a placeholder decl_id that is rewritten later in IR.
             // Defer type constraints for this call at parse/type-check time.
             if call.parser_info.contains_key("percent_forced_builtin") {
-                new_types = vec![Type::Any];
+                output_types = vec![Type::Any];
                 continue;
             }
 
             let decl = working_set.get_decl(call.decl_id);
             let io_types = decl.signature().input_output_types;
-            if new_types.contains(&Type::Any) {
+            if output_types.contains(&Type::Any) {
                 // if input type is any, then output type could be any of the valid output types
-                new_types = io_types.into_iter().map(|(_, out_type)| out_type).collect();
+                output_types = io_types.into_iter().map(|(_, out_type)| out_type).collect();
             } else {
                 // any current type which matches an input type is a possible output type
-                new_types = io_types
+                output_types = io_types
                     .into_iter()
                     .filter(|(in_type, _)| {
-                        current_types.iter().any(|ty| type_compatible(in_type, ty))
+                        input_types.iter().any(|ty| type_compatible(in_type, ty))
                     })
                     .map(|(_, out_type)| out_type)
                     .collect();
             }
 
-            if !new_types.is_empty() {
+            if !output_types.is_empty() {
                 continue;
             }
 
             if decl.signature().input_output_types.is_empty() {
-                new_types = vec![Type::Any];
+                output_types = vec![Type::Any];
                 continue;
             }
 
-            let Some(types_string) = combined_type_string(&current_types, "or") else {
+            let Some(types_string) = combined_type_string(&input_types, "or") else {
                 output_errors
                     .get_or_insert_default()
                     .push(ParseError::InternalError(
@@ -838,11 +838,11 @@ pub fn check_pipeline_type(
                 .get_or_insert_default()
                 .push(ParseError::InputMismatch(types_string, call.head));
         } else {
-            new_types = vec![elem.expr.ty.clone()];
+            output_types = vec![elem.expr.ty.clone()];
         }
     }
 
-    (new_types, output_errors)
+    (output_types, output_errors)
 }
 
 pub fn check_block_input_output(working_set: &StateWorkingSet, block: &Block) -> Vec<ParseError> {
