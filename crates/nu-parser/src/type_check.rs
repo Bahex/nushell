@@ -777,25 +777,27 @@ pub fn check_pipeline_type(
     pipeline: &Pipeline,
     input_type: Type,
 ) -> (Vec<Type>, Option<Vec<ParseError>>) {
-    let mut input_types: Vec<Type>;
-    let mut output_types: Vec<Type> = vec![input_type];
+    let mut input_types = Vec::new();
+    let mut output_types = Vec::new();
 
     let mut output_errors: Option<Vec<ParseError>> = None;
 
+    output_types.push(input_type);
     for elem in &pipeline.elements {
-        input_types = std::mem::take(&mut output_types);
+        std::mem::swap(&mut input_types, &mut output_types);
+        output_types.clear();
         input_types.sort();
         input_types.dedup();
 
         if elem.redirection.is_some() {
-            output_types = vec![Type::Any];
+            output_types.push(Type::Any);
             continue;
         }
         if let Expr::Call(call) = &elem.expr.expr {
             // Dynamic percent dispatch uses a placeholder decl_id that is rewritten later in IR.
             // Defer type constraints for this call at parse/type-check time.
             if call.parser_info.contains_key("percent_forced_builtin") {
-                output_types = vec![Type::Any];
+                output_types.push(Type::Any);
                 continue;
             }
 
@@ -803,16 +805,17 @@ pub fn check_pipeline_type(
             let io_types = decl.signature().input_output_types;
             if output_types.contains(&Type::Any) {
                 // if input type is any, then output type could be any of the valid output types
-                output_types = io_types.into_iter().map(|(_, out_type)| out_type).collect();
+                output_types.extend(io_types.into_iter().map(|(_, out_type)| out_type));
             } else {
                 // any current type which matches an input type is a possible output type
-                output_types = io_types
-                    .into_iter()
-                    .filter(|(in_type, _)| {
-                        input_types.iter().any(|ty| type_compatible(in_type, ty))
-                    })
-                    .map(|(_, out_type)| out_type)
-                    .collect();
+                output_types.extend(
+                    io_types
+                        .into_iter()
+                        .filter(|(in_type, _)| {
+                            input_types.iter().any(|ty| type_compatible(in_type, ty))
+                        })
+                        .map(|(_, out_type)| out_type),
+                );
             }
 
             if !output_types.is_empty() {
@@ -820,7 +823,7 @@ pub fn check_pipeline_type(
             }
 
             if decl.signature().input_output_types.is_empty() {
-                output_types = vec![Type::Any];
+                output_types.push(Type::Any);
                 continue;
             }
 
@@ -838,7 +841,7 @@ pub fn check_pipeline_type(
                 .get_or_insert_default()
                 .push(ParseError::InputMismatch(types_string, call.head));
         } else {
-            output_types = vec![elem.expr.ty.clone()];
+            output_types.push(elem.expr.ty.clone());
         }
     }
 
