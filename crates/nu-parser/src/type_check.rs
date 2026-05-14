@@ -875,22 +875,18 @@ pub fn check_block_input_output(working_set: &StateWorkingSet, block: &Block) ->
             .iter()
             .any(|ty| type_compatible(output_type, ty))
         {
-            let span = if block.pipelines.is_empty() {
-                if let Some(span) = block.span {
-                    span
-                } else {
-                    continue;
+            let span = match block.pipelines.as_slice() {
+                [] => match block.span {
+                    Some(span) => span,
+                    None => continue,
+                },
+                [.., last] => {
+                    last.elements
+                        .last()
+                        .expect("internal error: we should have elements")
+                        .expr
+                        .span
                 }
-            } else {
-                block
-                    .pipelines
-                    .last()
-                    .expect("internal error: we should have pipelines")
-                    .elements
-                    .last()
-                    .expect("internal error: we should have elements")
-                    .expr
-                    .span
             };
 
             let Some(current_ty_string) = combined_type_string(&current_output_types, "or") else {
