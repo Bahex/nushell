@@ -3277,22 +3277,15 @@ mod input_types {
         b"def q []: nothing -> record<c: record<a: int b: int> e: int> {{c: {a: 1 b: 2} e: 1}}",
         false
     )]
-    #[ignore = "empty blocks are always inferred to return nothing, regardles of input types"]
     #[case::input_output_pass_through(b"def q []: int -> int {}", false)]
-    #[ignore = "empty blocks are always inferred to return nothing, regardles of input types"]
     #[case::input_output_pass_through(b"def q []: string -> string {}", false)]
-    #[ignore = "empty blocks are always inferred to return nothing, regardles of input types"]
     #[case::input_output_pass_through(b"def q []: [int -> int, string -> string] {}", false)]
-    #[ignore = "empty blocks are always inferred to return nothing, regardles of input types"]
     #[case::input_output_pass_through(b"def q []: [int -> string, string -> int] {}", true)]
-    #[ignore = "empty blocks are always inferred to return nothing, regardles of input types"]
     #[case::input_output_pass_through(
         b"def q []: record<a: int, b: string> -> record<a: int, b: string> {}",
         false
     )]
-    #[ignore = "empty blocks are always inferred to return nothing, regardles of input types"]
     #[case::input_output_pass_through_incorrect(b"def q []: int -> nothing {}", true)]
-    #[ignore = "empty blocks are always inferred to return nothing, regardles of input types"]
     #[case::input_output_pass_through_incorrect(b"def q []: nothing -> int {}", true)]
     #[case::input_output(b"def q []: nothing -> list<string {[]}", true)]
     #[case::input_output(b"def q []: nothing -> record<c: int e: int {{c: 1 e: 1}}", true)]

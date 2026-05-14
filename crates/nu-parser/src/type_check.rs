@@ -851,7 +851,7 @@ pub fn check_block_input_output(working_set: &StateWorkingSet, block: &Block) ->
 
     for (input_type, output_type) in &block.signature.input_output_types {
         let current_output_types = match block.pipelines.as_slice() {
-            [] => vec![Type::Nothing],
+            [] => vec![input_type.clone()],
             pipelines => {
                 pipelines
                     .iter()
