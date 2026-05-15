@@ -313,7 +313,6 @@ fn array_of_wrong_types() -> TestResult {
 
 #[test]
 #[exp(ENFORCE_RUNTIME_ANNOTATIONS)]
-#[ignore = "`var` gets its type from the param/flag (int), an error is thrown when a null value is assigned instead"]
 fn optional_parameters_and_flags_are_nullable() -> Result {
     let mut tester = test();
 
