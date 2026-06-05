@@ -37,50 +37,18 @@ pub fn garbage_pipeline(working_set: &mut StateWorkingSet, spans: &[Span]) -> Pi
     Pipeline::from_vec(vec![garbage(working_set, Span::concat(spans))])
 }
 
-fn is_identifier_byte(b: u8) -> bool {
-    b != b'.'
-        && b != b'['
-        && b != b'('
-        && b != b'{'
-        && b != b'+'
-        && b != b'-'
-        && b != b'*'
-        && b != b'^'
-        && b != b'%'
-        && b != b'/'
-        && b != b'='
-        && b != b'!'
-        && b != b'<'
-        && b != b'>'
-        && b != b'&'
-        && b != b'|'
+fn is_identifier_byte(b: &u8) -> bool {
+    !b".[({+-*^%/=!<>&|".contains(b)
 }
 
 pub fn is_math_expression_like(working_set: &mut StateWorkingSet, span: Span) -> bool {
     let bytes = working_set.get_span_contents(span);
-    if bytes.is_empty() {
-        return false;
-    }
-
-    if bytes == b"true"
-        || bytes == b"false"
-        || bytes == b"null"
-        || bytes == b"not"
-        || bytes == b"if"
-        || bytes == b"match"
-    {
-        return true;
-    }
-
-    let b = bytes[0];
-
-    // check for raw string
-    if bytes.starts_with(b"r#") {
-        return true;
-    }
-
-    if b == b'(' || b == b'{' || b == b'[' || b == b'$' || b == b'"' || b == b'\'' || b == b'-' {
-        return true;
+    match bytes {
+        [] => return false,
+        b"true" | b"false" | b"null" | b"not" | b"if" | b"match" => return true,
+        [b'r', b'#', ..] => return true,
+        [b'(' | b'{' | b'[' | b'$' | b'"' | b'\'' | b'-', ..] => return true,
+        _ => {}
     }
 
     let starting_error_count = working_set.parse_errors.len();
@@ -132,52 +100,42 @@ pub fn is_math_expression_like(working_set: &mut StateWorkingSet, span: Span) ->
 }
 
 fn is_env_variable_name(bytes: &[u8]) -> bool {
-    if bytes.is_empty() {
-        return false;
+    match bytes {
+        [first, rest @ ..] if first == &b'_' || first.is_ascii_alphabetic() => {
+            rest.iter().all(|&b| b.is_ascii_alphanumeric() || b == b'_')
+        }
+        _ => false,
     }
-
-    let first = bytes[0];
-    if !first.is_ascii_alphabetic() && first != b'_' {
-        return false;
-    }
-
-    bytes
-        .iter()
-        .skip(1)
-        .all(|&b| b.is_ascii_alphanumeric() || b == b'_')
 }
 
 fn is_identifier(bytes: &[u8]) -> bool {
-    bytes.iter().all(|x| is_identifier_byte(*x))
+    bytes.iter().all(is_identifier_byte)
 }
 
 pub fn is_variable(bytes: &[u8]) -> bool {
-    if bytes.len() > 1 && bytes[0] == b'$' {
-        is_identifier(&bytes[1..])
-    } else {
-        is_identifier(bytes)
+    match bytes {
+        [b'$', var @ ..] | var if !var.is_empty() => is_identifier(var),
+        _ => false,
     }
 }
 
+#[rustfmt::skip]
 pub fn trim_quotes(bytes: &[u8]) -> &[u8] {
-    if (bytes.starts_with(b"\"") && bytes.ends_with(b"\"") && bytes.len() > 1)
-        || (bytes.starts_with(b"\'") && bytes.ends_with(b"\'") && bytes.len() > 1)
-        || (bytes.starts_with(b"`") && bytes.ends_with(b"`") && bytes.len() > 1)
-    {
-        &bytes[1..(bytes.len() - 1)]
-    } else {
-        bytes
+    match bytes {
+          [b'\'', trimmed @ .., b'\'']
+        | [ b'"', trimmed @ ..,  b'"']
+        | [ b'`', trimmed @ ..,  b'`'] => trimmed,
+        not_trimmed => not_trimmed,
     }
 }
 
+#[rustfmt::skip]
 pub fn trim_quotes_str(s: &str) -> &str {
-    if (s.starts_with('"') && s.ends_with('"') && s.len() > 1)
-        || (s.starts_with('\'') && s.ends_with('\'') && s.len() > 1)
-        || (s.starts_with('`') && s.ends_with('`') && s.len() > 1)
-    {
-        &s[1..(s.len() - 1)]
-    } else {
-        s
+    match s.as_bytes() {
+          [b'\'', .., b'\'']
+        | [ b'"', ..,  b'"']
+        | [ b'`', ..,  b'`'] => &s[1..(s.len() - 1)],
+        _ => s,
     }
 }
 
@@ -509,16 +467,11 @@ fn parse_external_arg(working_set: &mut StateWorkingSet, span: Span) -> External
 }
 
 fn parse_regular_external_arg(working_set: &mut StateWorkingSet, span: Span) -> Expression {
-    let contents = working_set.get_span_contents(span);
-
-    if contents.starts_with(b"$") {
-        parse_dollar_expr(working_set, span)
-    } else if contents.starts_with(b"(") {
-        parse_paren_expr(working_set, span, &SyntaxShape::Any)
-    } else if contents.starts_with(b"[") {
-        parse_list_expression(working_set, span, &SyntaxShape::Any)
-    } else {
-        parse_external_string(working_set, span)
+    match working_set.get_span_contents(span) {
+        [b'$', ..] => parse_dollar_expr(working_set, span, &SyntaxShape::Any),
+        [b'(', ..] => parse_paren_expr(working_set, span, &SyntaxShape::Any),
+        [b'[', ..] => parse_list_expression(working_set, span, &SyntaxShape::Any),
+        _ => parse_external_string(working_set, span),
     }
 }
 
@@ -531,9 +484,9 @@ pub fn parse_external_call(
 
     let head_span = spans[0];
 
-    let head_contents = working_set.get_span_contents(head_span).to_vec();
+    let head_contents = working_set.get_span_contents(head_span);
 
-    let head = if head_contents.starts_with(b"$") || head_contents.starts_with(b"(") {
+    let head = if let [b'$' | b'(', ..] = head_contents {
         // the expression is inside external_call, so it's a subexpression
         let arg = parse_expression(working_set, &[head_span]);
         Box::new(arg)
@@ -561,7 +514,7 @@ fn ensure_flag_arg_type(
     arg_shape: &SyntaxShape,
     long_name_span: Span,
 ) -> (Spanned<String>, Expression) {
-    if !type_compatible(&arg.ty, &arg_shape.to_type()) {
+    if !type_compatible(&arg_shape.to_type(), &arg.ty) {
         working_set.error(ParseError::TypeMismatch(
             arg_shape.to_type(),
             arg.ty,
@@ -585,16 +538,34 @@ fn ensure_flag_arg_type(
     }
 }
 
+/// Result of attempting to parse a long flag.
+///
+/// This tri-state enum indicates whether a long flag was found, no flag was found,
+/// or the end-of-options delimiter `--` was found (which stops all flag parsing).
+enum LongFlagParseResult {
+    /// A long flag was successfully parsed: (flag_name, value_expression)
+    FoundFlag(Spanned<String>, Option<Expression>),
+    /// No long flag found at this position
+    NoFlag,
+    /// End-of-options delimiter `--` found; stop flag parsing
+    EndOfOptions,
+}
+
 fn parse_long_flag(
     working_set: &mut StateWorkingSet,
     spans: &[Span],
     spans_idx: &mut usize,
     sig: &Signature,
-) -> (Option<Spanned<String>>, Option<Expression>) {
+) -> LongFlagParseResult {
     let arg_span = spans[*spans_idx];
     let arg_contents = working_set.get_span_contents(arg_span);
 
     if arg_contents.starts_with(b"--") {
+        // Check for end-of-options delimiter: exactly "--"
+        if arg_contents == b"--" {
+            return LongFlagParseResult::EndOfOptions;
+        }
+
         // FIXME: only use the first flag you find?
         let split: Vec<_> = arg_contents.split(|x| *x == b'=').collect();
         let long_name = String::from_utf8(split[0].into());
@@ -616,14 +587,14 @@ fn parse_long_flag(
                             arg_shape,
                             Span::new(arg_span.start, arg_span.start + long_name_len + 2),
                         );
-                        (Some(arg_name), Some(val_expression))
+                        LongFlagParseResult::FoundFlag(arg_name, Some(val_expression))
                     } else if let Some(arg) = spans.get(*spans_idx + 1) {
                         let arg = parse_value(working_set, *arg, arg_shape);
 
                         *spans_idx += 1;
                         let (arg_name, val_expression) =
                             ensure_flag_arg_type(working_set, long_name, arg, arg_shape, arg_span);
-                        (Some(arg_name), Some(val_expression))
+                        LongFlagParseResult::FoundFlag(arg_name, Some(val_expression))
                     } else {
                         working_set.error(ParseError::MissingFlagParam(
                             arg_shape.to_string(),
@@ -631,11 +602,11 @@ fn parse_long_flag(
                         ));
                         // NOTE: still need to cover this incomplete flag in the final expression
                         // see https://github.com/nushell/nushell/issues/16375
-                        (
-                            Some(Spanned {
+                        LongFlagParseResult::FoundFlag(
+                            Spanned {
                                 item: long_name,
                                 span: arg_span,
-                            }),
+                            },
                             None,
                         )
                     }
@@ -657,13 +628,13 @@ fn parse_long_flag(
                             &SyntaxShape::Boolean,
                             Span::new(arg_span.start, arg_span.start + long_name_len + 2),
                         );
-                        (Some(arg_name), Some(val_expression))
+                        LongFlagParseResult::FoundFlag(arg_name, Some(val_expression))
                     } else {
-                        (
-                            Some(Spanned {
+                        LongFlagParseResult::FoundFlag(
+                            Spanned {
                                 item: long_name,
                                 span: arg_span,
-                            }),
+                            },
                             None,
                         )
                     }
@@ -678,26 +649,26 @@ fn parse_long_flag(
                     arg_span,
                     suggestion,
                 ));
-                (
-                    Some(Spanned {
+                LongFlagParseResult::FoundFlag(
+                    Spanned {
                         item: long_name.clone(),
                         span: arg_span,
-                    }),
+                    },
                     None,
                 )
             }
         } else {
             working_set.error(ParseError::NonUtf8(arg_span));
-            (
-                Some(Spanned {
+            LongFlagParseResult::FoundFlag(
+                Spanned {
                     item: "--".into(),
                     span: arg_span,
-                }),
+                },
                 None,
             )
         }
     } else {
-        (None, None)
+        LongFlagParseResult::NoFlag
     }
 }
 
@@ -855,7 +826,7 @@ fn parse_oneof(
             false => parse_value(working_set, spans[*spans_idx], shape),
         };
 
-        let new_errors = working_set.parse_errors[starting_error_count..].to_vec();
+        let new_errors = &working_set.parse_errors[starting_error_count..];
         // no new errors found means success
         let Some(first_error_offset) = new_errors.iter().map(|e| e.span().start).min() else {
             return value;
@@ -876,7 +847,8 @@ fn parse_oneof(
             };
             max_first_error_offset = first_error_offset;
             best_guess = Some(value);
-            best_guess_errors = new_errors;
+            best_guess_errors.clear();
+            best_guess_errors.extend_from_slice(new_errors);
         }
         working_set.parse_errors.truncate(starting_error_count);
     }
@@ -1105,143 +1077,173 @@ pub fn parse_internal_call(
         working_set.enter_scope();
     }
 
+    let mut end_of_options = false;
+
     while spans_idx < spans.len() {
         let arg_span = spans[spans_idx];
 
         let starting_error_count = working_set.parse_errors.len();
-        // Check if we're on a long flag, if so, parse
-        let (long_name, arg) = parse_long_flag(working_set, spans, &mut spans_idx, &signature);
 
-        if let Some(long_name) = long_name {
-            // We found a long flag, like --bar
-            if working_set.parse_errors[starting_error_count..]
-                .iter()
-                .any(|x| matches!(x, ParseError::UnknownFlag(_, _, _, _)))
-                && signature.allows_unknown_args
-            {
-                working_set.parse_errors.truncate(starting_error_count);
-                let arg = parse_unknown_arg(working_set, arg_span, &signature);
+        // If we've seen --, skip all flag parsing and go straight to positional parsing
+        if !end_of_options {
+            // Check if we're on a long flag, if so, parse
+            let flag_parse_result = parse_long_flag(working_set, spans, &mut spans_idx, &signature);
 
-                call.add_unknown(arg);
-            } else {
-                call.add_named((long_name, None, arg));
-            }
-
-            spans_idx += 1;
-            continue;
-        }
-
-        let starting_error_count = working_set.parse_errors.len();
-
-        // Check if we're on a short flag or group of short flags, if so, parse
-        let short_flags = parse_short_flags(
-            working_set,
-            spans,
-            &mut spans_idx,
-            positional_idx,
-            &signature,
-        );
-
-        if let Some(mut short_flags) = short_flags {
-            if short_flags.is_empty() {
-                // workaround for completions (PR #6067)
-                short_flags.push(Flag {
-                    long: "".to_string(),
-                    short: Some('a'),
-                    arg: None,
-                    required: false,
-                    desc: "".to_string(),
-                    var_id: None,
-                    default_value: None,
-                    completion: None,
-                })
-            }
-
-            if working_set.parse_errors[starting_error_count..]
-                .iter()
-                .any(|x| matches!(x, ParseError::UnknownFlag(_, _, _, _)))
-                && signature.allows_unknown_args
-            {
-                working_set.parse_errors.truncate(starting_error_count);
-                let arg = parse_unknown_arg(working_set, arg_span, &signature);
-
-                call.add_unknown(arg);
-            } else {
-                for flag in short_flags {
-                    let _ = working_set.add_span(spans[spans_idx]);
-
-                    if let Some(arg_shape) = flag.arg {
-                        if let Some(arg) = spans.get(spans_idx + 1) {
-                            let arg = parse_value(working_set, *arg, &arg_shape);
-                            let (arg_name, val_expression) = ensure_flag_arg_type(
-                                working_set,
-                                flag.long.clone(),
-                                arg.clone(),
-                                &arg_shape,
-                                spans[spans_idx],
-                            );
-
-                            if flag.long.is_empty() {
-                                if let Some(short) = flag.short {
-                                    call.add_named((
-                                        arg_name,
-                                        Some(Spanned {
-                                            item: short.to_string(),
-                                            span: spans[spans_idx],
-                                        }),
-                                        Some(val_expression),
-                                    ));
-                                }
-                            } else {
-                                call.add_named((arg_name, None, Some(val_expression)));
-                            }
-                            spans_idx += 1;
-                        } else {
-                            working_set.error(ParseError::MissingFlagParam(
-                                arg_shape.to_string(),
-                                arg_span,
-                            ));
-                            // NOTE: still need to cover this incomplete flag in the final expression
-                            // see https://github.com/nushell/nushell/issues/16375
-                            call.add_named((
-                                Spanned {
-                                    item: String::new(),
-                                    span: spans[spans_idx],
-                                },
-                                None,
-                                None,
-                            ));
-                        }
-                    } else if flag.long.is_empty() {
-                        if let Some(short) = flag.short {
-                            call.add_named((
-                                Spanned {
-                                    item: String::new(),
-                                    span: spans[spans_idx],
-                                },
-                                Some(Spanned {
-                                    item: short.to_string(),
-                                    span: spans[spans_idx],
-                                }),
-                                None,
-                            ));
-                        }
+            match flag_parse_result {
+                LongFlagParseResult::EndOfOptions => {
+                    if signature.allows_unknown_args {
+                        // For commands that pass through unknown args (extern, def --wrapped,
+                        // exec, etc.), -- must be forwarded to the underlying program.
+                        // Directly add -- as an unknown arg, then advance past it.
+                        let arg = parse_unknown_arg(working_set, arg_span, &signature);
+                        call.add_unknown(arg);
+                        spans_idx += 1;
+                        continue;
                     } else {
-                        call.add_named((
-                            Spanned {
-                                item: flag.long.clone(),
-                                span: spans[spans_idx],
-                            },
-                            None,
-                            None,
-                        ));
+                        // For regular commands, consume -- and switch to positional-only mode.
+                        end_of_options = true;
+                        spans_idx += 1;
+                        continue;
                     }
                 }
-            }
+                LongFlagParseResult::FoundFlag(long_name, arg) => {
+                    // We found a long flag, like --bar
+                    if working_set.parse_errors[starting_error_count..]
+                        .iter()
+                        .any(|x| matches!(x, ParseError::UnknownFlag(_, _, _, _)))
+                        && signature.allows_unknown_args
+                    {
+                        working_set.parse_errors.truncate(starting_error_count);
+                        let arg = parse_unknown_arg(working_set, arg_span, &signature);
 
-            spans_idx += 1;
-            continue;
+                        call.add_unknown(arg);
+                    } else {
+                        call.add_named((long_name, None, arg));
+                    }
+
+                    spans_idx += 1;
+                    continue;
+                }
+                LongFlagParseResult::NoFlag => {
+                    // No long flag found, continue to short flag parsing
+                }
+            }
         }
+
+        // Only try short flag parsing if we haven't seen -- yet
+        if !end_of_options {
+            let starting_error_count = working_set.parse_errors.len();
+
+            // Check if we're on a short flag or group of short flags, if so, parse
+            let short_flags = parse_short_flags(
+                working_set,
+                spans,
+                &mut spans_idx,
+                positional_idx,
+                &signature,
+            );
+
+            if let Some(mut short_flags) = short_flags {
+                if short_flags.is_empty() {
+                    // workaround for completions (PR #6067)
+                    short_flags.push(Flag {
+                        long: "".to_string(),
+                        short: Some('a'),
+                        arg: None,
+                        required: false,
+                        desc: "".to_string(),
+                        var_id: None,
+                        default_value: None,
+                        completion: None,
+                    })
+                }
+
+                if working_set.parse_errors[starting_error_count..]
+                    .iter()
+                    .any(|x| matches!(x, ParseError::UnknownFlag(_, _, _, _)))
+                    && signature.allows_unknown_args
+                {
+                    working_set.parse_errors.truncate(starting_error_count);
+                    let arg = parse_unknown_arg(working_set, arg_span, &signature);
+
+                    call.add_unknown(arg);
+                } else {
+                    for flag in short_flags {
+                        let _ = working_set.add_span(spans[spans_idx]);
+
+                        if let Some(arg_shape) = flag.arg {
+                            if let Some(arg) = spans.get(spans_idx + 1) {
+                                let arg = parse_value(working_set, *arg, &arg_shape);
+                                let (arg_name, val_expression) = ensure_flag_arg_type(
+                                    working_set,
+                                    flag.long.clone(),
+                                    arg.clone(),
+                                    &arg_shape,
+                                    spans[spans_idx],
+                                );
+
+                                if flag.long.is_empty() {
+                                    if let Some(short) = flag.short {
+                                        call.add_named((
+                                            arg_name,
+                                            Some(Spanned {
+                                                item: short.to_string(),
+                                                span: spans[spans_idx],
+                                            }),
+                                            Some(val_expression),
+                                        ));
+                                    }
+                                } else {
+                                    call.add_named((arg_name, None, Some(val_expression)));
+                                }
+                                spans_idx += 1;
+                            } else {
+                                working_set.error(ParseError::MissingFlagParam(
+                                    arg_shape.to_string(),
+                                    arg_span,
+                                ));
+                                // NOTE: still need to cover this incomplete flag in the final expression
+                                // see https://github.com/nushell/nushell/issues/16375
+                                call.add_named((
+                                    Spanned {
+                                        item: String::new(),
+                                        span: spans[spans_idx],
+                                    },
+                                    None,
+                                    None,
+                                ));
+                            }
+                        } else if flag.long.is_empty() {
+                            if let Some(short) = flag.short {
+                                call.add_named((
+                                    Spanned {
+                                        item: String::new(),
+                                        span: spans[spans_idx],
+                                    },
+                                    Some(Spanned {
+                                        item: short.to_string(),
+                                        span: spans[spans_idx],
+                                    }),
+                                    None,
+                                ));
+                            }
+                        } else {
+                            call.add_named((
+                                Spanned {
+                                    item: flag.long.clone(),
+                                    span: spans[spans_idx],
+                                },
+                                None,
+                                None,
+                            ));
+                        }
+                    }
+                }
+
+                spans_idx += 1;
+                continue;
+            }
+        } // end if !end_of_options (short flags)
 
         {
             let contents = working_set.get_span_contents(spans[spans_idx]);
@@ -2247,12 +2249,20 @@ pub fn parse_range(working_set: &mut StateWorkingSet, span: Span) -> Option<Expr
     ))
 }
 
-pub(crate) fn parse_dollar_expr(working_set: &mut StateWorkingSet, span: Span) -> Expression {
+pub(crate) fn parse_dollar_expr(
+    working_set: &mut StateWorkingSet,
+    span: Span,
+    shape: &SyntaxShape,
+) -> Expression {
     trace!("parsing: dollar expression");
     let contents = working_set.get_span_contents(span);
 
     if contents.starts_with(b"$\"") || contents.starts_with(b"$'") {
-        parse_string_interpolation(working_set, span)
+        if matches!(shape, SyntaxShape::GlobPattern) && is_bare_string_interpolation(contents) {
+            parse_glob_pattern(working_set, span)
+        } else {
+            parse_string_interpolation(working_set, span)
+        }
     } else if contents.starts_with(b"$.") {
         parse_simple_cell_path(working_set, Span::new(span.start + 2, span.end))
     } else {
@@ -2291,25 +2301,21 @@ pub fn parse_raw_string(working_set: &mut StateWorkingSet, span: Span) -> Expres
     // the whole raw string should contains at least
     // 1(r) + prefix_sharp_cnt + 1(') + 1(') + postfix_sharp characters
     if bytes.len() < prefix_sharp_cnt + expect_postfix_sharp_cnt + 3 {
-        working_set.error(ParseError::Unclosed('\''.into(), span));
+        working_set.error(ParseError::Unclosed("'", span));
         return garbage(working_set, span);
     }
 
     // check for unbalanced # and single quotes.
     let postfix_bytes = &bytes[bytes.len() - expect_postfix_sharp_cnt..bytes.len()];
     if postfix_bytes.iter().any(|b| *b != b'#') {
-        working_set.error(ParseError::Unbalanced(
-            "prefix #".to_string(),
-            "postfix #".to_string(),
-            span,
-        ));
+        working_set.error(ParseError::Unbalanced("prefix #", "postfix #", span));
         return garbage(working_set, span);
     }
     // check for unblanaced single quotes.
     if bytes[1 + prefix_sharp_cnt] != b'\''
         || bytes[bytes.len() - expect_postfix_sharp_cnt - 1] != b'\''
     {
-        working_set.error(ParseError::Unclosed('\''.into(), span));
+        working_set.error(ParseError::Unclosed("'", span));
         return garbage(working_set, span);
     }
 
@@ -2349,13 +2355,17 @@ pub fn parse_paren_expr(
         let malformed_subexpr = working_set.parse_errors[starting_error_count..]
             .first()
             .is_some_and(|e| match e {
-                ParseError::Unclosed(right, _) if (right == ")") => true,
-                ParseError::Unbalanced(left, right, _) if left == "(" && right == ")" => true,
+                ParseError::Unclosed(right, _) if (*right == ")") => true,
+                ParseError::Unbalanced(left, right, _) if *left == "(" && *right == ")" => true,
                 _ => false,
             });
         if malformed_subexpr {
             working_set.parse_errors.truncate(starting_error_count);
-            parse_string_interpolation(working_set, span)
+            if matches!(shape, SyntaxShape::GlobPattern) {
+                parse_glob_pattern(working_set, span)
+            } else {
+                parse_string_interpolation(working_set, span)
+            }
         } else {
             fcp_expr
         }
@@ -2790,11 +2800,21 @@ pub fn parse_cell_path(
                     expr: Expr::Int(val),
                     span,
                     ..
-                } => tail.push(PathMember::Int {
-                    val: val as usize,
-                    span,
-                    optional: false,
-                }),
+                } => {
+                    if val < 0 {
+                        working_set.error(ParseError::InvalidLiteral(
+                            "negative index is not supported".into(),
+                            "cell path".into(),
+                            span,
+                        ));
+                        return tail;
+                    }
+                    tail.push(PathMember::Int {
+                        val: val as usize,
+                        span,
+                        optional: false,
+                    })
+                }
                 _ => {
                     let result = parse_string(working_set, path_element.span);
                     match result {
@@ -2903,7 +2923,7 @@ pub fn parse_full_cell_path(
             if bytes.ends_with(b")") {
                 end -= 1;
             } else {
-                working_set.error(ParseError::Unclosed(")".into(), Span::new(end, end)));
+                working_set.error(ParseError::Unclosed(")", Span::new(end, end)));
                 is_closed = false;
             }
 
@@ -2992,70 +3012,118 @@ pub fn parse_full_cell_path(
     }
 }
 
-pub fn parse_directory(working_set: &mut StateWorkingSet, span: Span) -> Expression {
-    let bytes = working_set.get_span_contents(span);
-    trace!("parsing: directory");
+enum PathLikeKind {
+    Directory,
+    Filepath,
+    Glob,
+}
 
-    // Check for bare word interpolation
-    if !bytes.is_empty()
-        && bytes[0] != b'\''
-        && bytes[0] != b'"'
-        && bytes[0] != b'`'
-        && bytes.contains(&b'(')
-    {
-        return parse_string_interpolation(working_set, span);
+impl PathLikeKind {
+    /// Returns the name used for trace logging during parsing.
+    fn trace_name(&self) -> &'static str {
+        match self {
+            PathLikeKind::Directory => "directory",
+            PathLikeKind::Filepath => "filepath",
+            PathLikeKind::Glob => "glob pattern",
+        }
     }
 
+    /// Returns the error message displayed when parsing fails.
+    fn error_msg(&self) -> &'static str {
+        match self {
+            PathLikeKind::Directory => "directory",
+            PathLikeKind::Filepath => "filepath",
+            PathLikeKind::Glob => "glob pattern string",
+        }
+    }
+
+    /// Constructs the appropriate `Expr` and its corresponding `Type` for a simple (non-interpolated) path.
+    fn to_expr(&self, token: String, quoted: bool) -> (Expr, Type) {
+        match self {
+            PathLikeKind::Directory => (Expr::Directory(token, quoted), Type::String),
+            PathLikeKind::Filepath => (Expr::Filepath(token, quoted), Type::String),
+            PathLikeKind::Glob => (Expr::GlobPattern(token, quoted), Type::Glob),
+        }
+    }
+
+    /// Constructs the appropriate interpolation `Expr` for a path containing subexpressions.
+    fn to_interpolation_expr(&self, exprs: Vec<Expression>, quoted: bool) -> Expr {
+        match self {
+            PathLikeKind::Directory | PathLikeKind::Filepath => Expr::StringInterpolation(exprs),
+            PathLikeKind::Glob => Expr::GlobInterpolation(exprs, quoted),
+        }
+    }
+}
+
+/// Common helper for parsing path-like expressions (filepath, directory, glob pattern).
+///
+/// This function consolidates the repetitive logic for parsing path types, including:
+/// - Bare word interpolation detection
+/// - Escape sequence processing
+/// - Quote state tracking
+/// - Error handling
+///
+/// # Arguments
+///
+/// * `working_set` - The current parser state
+/// * `span` - The source span of the expression
+/// * `kind` - The kind of path-like expression to parse
+fn parse_path_like(
+    working_set: &mut StateWorkingSet,
+    span: Span,
+    kind: PathLikeKind,
+) -> Expression {
+    let bytes = working_set.get_span_contents(span);
     let quoted = is_quoted(bytes);
+    trace!("parsing: {}", kind.trace_name());
+
+    // Check for bare word interpolation
+    if is_bare_string_interpolation(bytes) {
+        let interpolation_expr = parse_string_interpolation(working_set, span);
+
+        // Convert StringInterpolation to the appropriate interpolation type
+        if let Expr::StringInterpolation(exprs) = interpolation_expr.expr {
+            return Expression::new(
+                working_set,
+                kind.to_interpolation_expr(exprs, quoted),
+                span,
+                interpolation_expr.ty.clone(),
+            );
+        }
+
+        return interpolation_expr;
+    }
+
     let (token, err) = unescape_unquote_string(bytes, span);
+    let is_quoted_internal = is_quoted(bytes);
 
     if err.is_none() {
         trace!("-- found {token}");
 
-        Expression::new(
-            working_set,
-            Expr::Directory(token, quoted),
-            span,
-            Type::String,
-        )
+        let (expr, ty) = kind.to_expr(token, is_quoted_internal);
+
+        Expression::new(working_set, expr, span, ty)
     } else {
-        working_set.error(ParseError::Expected("directory", span));
+        working_set.error(ParseError::Expected(kind.error_msg(), span));
 
         garbage(working_set, span)
     }
 }
 
+fn is_bare_string_interpolation(bytes: &[u8]) -> bool {
+    match bytes {
+        [] => false,
+        [b'\'' | b'"' | b'`', ..] => false,
+        _ => bytes.contains(&b'('),
+    }
+}
+
+pub fn parse_directory(working_set: &mut StateWorkingSet, span: Span) -> Expression {
+    parse_path_like(working_set, span, PathLikeKind::Directory)
+}
+
 pub fn parse_filepath(working_set: &mut StateWorkingSet, span: Span) -> Expression {
-    let bytes = working_set.get_span_contents(span);
-    trace!("parsing: filepath");
-
-    // Check for bare word interpolation
-    if !bytes.is_empty()
-        && bytes[0] != b'\''
-        && bytes[0] != b'"'
-        && bytes[0] != b'`'
-        && bytes.contains(&b'(')
-    {
-        return parse_string_interpolation(working_set, span);
-    }
-
-    let quoted = is_quoted(bytes);
-    let (token, err) = unescape_unquote_string(bytes, span);
-
-    if err.is_none() {
-        trace!("-- found {token}");
-
-        Expression::new(
-            working_set,
-            Expr::Filepath(token, quoted),
-            span,
-            Type::String,
-        )
-    } else {
-        working_set.error(ParseError::Expected("filepath", span));
-
-        garbage(working_set, span)
-    }
+    parse_path_like(working_set, span, PathLikeKind::Filepath)
 }
 
 /// Parse a datetime type, eg '2022-02-02'
@@ -3409,50 +3477,112 @@ fn modf(x: f64) -> (f64, f64) {
 }
 
 pub fn parse_glob_pattern(working_set: &mut StateWorkingSet, span: Span) -> Expression {
-    let bytes = working_set.get_span_contents(span);
-    let quoted = is_quoted(bytes);
-    trace!("parsing: glob pattern");
-
-    // Check for bare word interpolation
-    if !bytes.is_empty()
-        && bytes[0] != b'\''
-        && bytes[0] != b'"'
-        && bytes[0] != b'`'
-        && bytes.contains(&b'(')
-    {
-        let interpolation_expr = parse_string_interpolation(working_set, span);
-
-        // Convert StringInterpolation to GlobInterpolation
-        if let Expr::StringInterpolation(exprs) = interpolation_expr.expr {
-            return Expression::new(
-                working_set,
-                Expr::GlobInterpolation(exprs, quoted),
-                span,
-                Type::Glob,
-            );
-        }
-
-        return interpolation_expr;
-    }
-
-    let (token, err) = unescape_unquote_string(bytes, span);
-
-    if err.is_none() {
-        trace!("-- found {token}");
-
-        Expression::new(
-            working_set,
-            Expr::GlobPattern(token, quoted),
-            span,
-            Type::Glob,
-        )
-    } else {
-        working_set.error(ParseError::Expected("glob pattern string", span));
-
-        garbage(working_set, span)
-    }
+    parse_path_like(working_set, span, PathLikeKind::Glob)
 }
 
+/// Parse a hex escape sequence in the form `\xHH` (exactly 2 hex digits).
+///
+/// Returns the parsed byte value and the new index position.
+fn parse_hex_escape(bytes: &[u8], start_idx: usize, span: Span) -> Result<(u8, usize), ParseError> {
+    let hex_digits = bytes.get(start_idx + 1..start_idx + 3).ok_or_else(|| {
+        ParseError::InvalidLiteral(
+            "incomplete hex escape '\\xHH', expected 2 hex digits".into(),
+            "string".into(),
+            Span::new(span.start + start_idx, span.end),
+        )
+    })?;
+    if !hex_digits.iter().all(u8::is_ascii_hexdigit) {
+        return Err(ParseError::InvalidLiteral(
+            "invalid hex escape '\\xHH', expected exactly 2 hex digits".into(),
+            "string".into(),
+            Span::new(span.start + start_idx, span.end),
+        ));
+    }
+    str::from_utf8(hex_digits)
+        .ok()
+        .and_then(|s| u8::from_str_radix(s, 0x10).ok())
+        .map(|byte_val| (byte_val, start_idx + 3))
+        .ok_or_else(|| {
+            ParseError::InvalidLiteral(
+                "invalid hex escape '\\xHH'".into(),
+                "string".into(),
+                Span::new(span.start + start_idx, span.end),
+            )
+        })
+}
+
+/// Parse a Unicode escape sequence in the form `\u{XXXXXX}` (1-6 hex digits, max 0x10FFFF).
+///
+/// Returns the UTF-8 encoded bytes of the Unicode character and the new index position.
+fn parse_unicode_escape(
+    bytes: &[u8],
+    start_idx: usize,
+    span: Span,
+) -> Result<(char, usize), ParseError> {
+    let mut slice = &bytes[(start_idx + 1)..];
+    let mut current_idx = start_idx + 1;
+
+    // NOTE: this is a more defensive approach meant to avoid reading too much, but requires
+    //       changing error messages
+    // read no more than 8 bytes "{xxxxxx}"
+    // slice = &slice[..(8.min(slice.len()))];
+
+    slice = slice.strip_prefix(b"{").ok_or_else(|| {
+        ParseError::InvalidLiteral(
+            "invalid unicode escape '\\u{...}', must be 1-6 hex digits, max codepoint 0x10FFFF"
+                .into(),
+            "string".into(),
+            Span::new(span.start + start_idx, span.end),
+        )
+    })?;
+    current_idx += 1;
+
+    let end = slice.iter().position(|b| *b == b'}').ok_or_else(|| {
+        ParseError::InvalidLiteral(
+            "incomplete unicode escape '\\u{...}', missing closing '}'".into(),
+            "string".into(),
+            Span::new(span.start + start_idx, span.end),
+        )
+    })?;
+    let digits = &slice[..end];
+    current_idx += end; // the digits
+    current_idx += 1; // closing brace
+    let current_idx = current_idx;
+
+    let ch = Some(digits)
+        .filter(|b| (1..=6).contains(&b.len()))
+        .and_then(|b| str::from_utf8(b).ok())
+        .and_then(|s| u32::from_str_radix(s, 0x10).ok())
+        .and_then(char::from_u32)
+        .ok_or_else(|| {
+            ParseError::InvalidLiteral(
+                "invalid unicode escape '\\u{...}', must be 1-6 hex digits, max codepoint 0x10FFFF"
+                    .into(),
+                "string".into(),
+                Span::new(span.start + start_idx, span.end),
+            )
+        })?;
+
+    Ok((ch, current_idx))
+}
+
+/// Parse and process POSIX escape sequences in a byte string.
+///
+/// This function handles the following escape sequences:
+/// - Simple: `\n`, `\r`, `\t`, `\\`, `\"`, `\'`
+/// - Control: `\0`, `\a`, `\b`, `\e`, `\f`
+/// - Hex: `\xHH` (exactly 2 hex digits)
+/// - Unicode: `\u{XXXXXX}` (1-6 hex digits, max 0x10FFFF)
+/// - Special: `\/`, `\(`, `\)`, `\{`, `\}`, `\$`, `\^`, `\#`, `\|`, `\~`
+///
+/// The function processes escapes in a single pass. If no backslashes are present,
+/// the input is returned as-is for efficiency.
+///
+/// # Returns
+///
+/// A tuple of `(processed_bytes, parse_error)` where:
+/// - `processed_bytes` contains the unescaped content
+/// - `parse_error` is `Some` if an invalid escape sequence was encountered, `None` otherwise
 pub fn unescape_string(bytes: &[u8], span: Span) -> (Vec<u8>, Option<ParseError>) {
     let mut output = Vec::new();
     let mut error = None;
@@ -3549,69 +3679,51 @@ pub fn unescape_string(bytes: &[u8], span: Span) -> (Vec<u8>, Option<ParseError>
                     output.push(b'\t');
                     idx += 1;
                 }
+                Some(b'0') => {
+                    output.push(b'\0');
+                    idx += 1;
+                }
+                Some(b'x') => {
+                    // Hex escape: \xHH (exactly 2 hex digits)
+                    match parse_hex_escape(bytes, idx, span) {
+                        Ok((byte_val, new_idx)) => {
+                            output.push(byte_val);
+                            idx = new_idx;
+                        }
+                        Err(err) => {
+                            error = error.or(Some(err));
+                            break 'us_loop;
+                        }
+                    }
+                }
                 Some(b'u') => {
-                    let mut digits = String::with_capacity(10);
-                    let mut cur_idx = idx + 1; // index of first beyond current end of token
-
-                    if let Some(b'{') = bytes.get(idx + 1) {
-                        cur_idx = idx + 2;
-                        loop {
-                            match bytes.get(cur_idx) {
-                                Some(b'}') => {
-                                    cur_idx += 1;
-                                    break;
-                                }
-                                Some(c) => {
-                                    digits.push(*c as char);
-                                    cur_idx += 1;
-                                }
-                                _ => {
-                                    error = error.or(Some(ParseError::InvalidLiteral(
-                                        "missing '}' for unicode escape '\\u{X...}'".into(),
-                                        "string".into(),
-                                        Span::new(span.start + idx, span.end),
-                                    )));
-                                    break 'us_loop;
-                                }
-                            }
+                    // Unicode escape: \u{XXXXXX} (1-6 hex digits, max 0x10FFFF)
+                    match parse_unicode_escape(bytes, idx, span) {
+                        Ok((ch, new_idx)) => {
+                            let mut ch_buf = [0u8; 4];
+                            output.extend(ch.encode_utf8(&mut ch_buf).as_bytes());
+                            idx = new_idx;
+                        }
+                        Err(err) => {
+                            error = error.or(Some(err));
+                            break 'us_loop;
                         }
                     }
+                }
 
-                    if (1..=6).contains(&digits.len()) {
-                        let int = u32::from_str_radix(&digits, 16);
-
-                        if let Ok(int) = int
-                            && int <= 0x10ffff
-                        {
-                            let result = char::from_u32(int);
-
-                            if let Some(result) = result {
-                                let mut buffer = [0; 4];
-                                let result = result.encode_utf8(&mut buffer);
-
-                                for elem in result.bytes() {
-                                    output.push(elem);
-                                }
-
-                                idx = cur_idx;
-                                continue 'us_loop;
-                            }
-                        }
-                    }
-                    // fall through -- escape not accepted above, must be error.
+                Some(other) => {
                     error = error.or(Some(ParseError::InvalidLiteral(
-                            "invalid unicode escape '\\u{X...}', must be 1-6 hex digits, max value 10FFFF".into(),
-                            "string".into(),
-                            Span::new(span.start + idx, span.end),
+                        format!("unrecognized escape sequence '\\{}'", *other as char),
+                        "string".into(),
+                        Span::new(span.start + idx, span.end),
                     )));
                     break 'us_loop;
                 }
-
-                _ => {
+                None => {
                     error = error.or(Some(ParseError::InvalidLiteral(
-                        "unrecognized escape after '\\'".into(),
+                        "incomplete escape sequence after '\\'".into(),
                         "string".into(),
-                        Span::new(span.start + idx, span.end),
+                        Span::new(span.end.saturating_sub(1), span.end),
                     )));
                     break 'us_loop;
                 }
@@ -3625,6 +3737,17 @@ pub fn unescape_string(bytes: &[u8], span: Span) -> (Vec<u8>, Option<ParseError>
     (output, error)
 }
 
+/// Unescapes and unquotes a string, returning the content and any parse errors.
+///
+/// This function handles both quoted and unquoted strings, processing POSIX escape
+/// sequences only within double-quoted strings. Single-quoted and unquoted strings
+/// are returned as-is after removing their delimiters.
+///
+/// # Returns
+///
+/// A tuple of `(unescaped_string, parse_error)` where:
+/// - `unescaped_string` contains the processed content
+/// - `parse_error` is `Some` if an invalid escape sequence was encountered, `None` otherwise
 pub fn unescape_unquote_string(bytes: &[u8], span: Span) -> (String, Option<ParseError>) {
     if bytes.starts_with(b"\"") {
         // Needs unescaping
@@ -3682,7 +3805,7 @@ pub fn parse_string(working_set: &mut StateWorkingSet, span: Span) -> Expression
     }
 
     // Check for bare word interpolation
-    if bytes[0] != b'\'' && bytes[0] != b'"' && bytes[0] != b'`' && bytes.contains(&b'(') {
+    if is_bare_string_interpolation(bytes) {
         return parse_string_interpolation(working_set, span);
     }
 
@@ -3704,9 +3827,12 @@ pub fn parse_string(working_set: &mut StateWorkingSet, span: Span) -> Expression
     Expression::new(working_set, Expr::String(s), span, Type::String)
 }
 
+/// Check if a byte sequence is quoted with either single or double quotes.
+///
+/// Returns `true` if the bytes start and end with matching quotes (either `"` or `'`)
+/// and have at least one character between them.
 fn is_quoted(bytes: &[u8]) -> bool {
-    (bytes.starts_with(b"\"") && bytes.ends_with(b"\"") && bytes.len() > 1)
-        || (bytes.starts_with(b"\'") && bytes.ends_with(b"\'") && bytes.len() > 1)
+    matches!(bytes, [b'\'', .., b'\''] | [b'"', .., b'"'])
 }
 
 pub fn parse_string_strict(working_set: &mut StateWorkingSet, span: Span) -> Expression {
@@ -3722,15 +3848,15 @@ pub fn parse_string_strict(working_set: &mut StateWorkingSet, span: Span) -> Exp
             bytes
         };
         if bytes.starts_with(b"\"") && (bytes.len() == 1 || !bytes.ends_with(b"\"")) {
-            working_set.error(ParseError::Unclosed("\"".into(), span));
+            working_set.error(ParseError::Unclosed("\"", span));
             return garbage(working_set, span);
         }
         if bytes.starts_with(b"\'") && (bytes.len() == 1 || !bytes.ends_with(b"\'")) {
-            working_set.error(ParseError::Unclosed("\'".into(), span));
+            working_set.error(ParseError::Unclosed("\'", span));
             return garbage(working_set, span);
         }
         if bytes.starts_with(b"r#") && (bytes.len() == 1 || !bytes.ends_with(b"#")) {
-            working_set.error(ParseError::Unclosed("r#".into(), span));
+            working_set.error(ParseError::Unclosed("r#", span));
             return garbage(working_set, span);
         }
     }
@@ -3924,7 +4050,7 @@ pub fn parse_var_with_opt_type(
     mutable: bool,
 ) -> (Expression, Option<Type>) {
     let name_span = spans[*spans_idx];
-    let bytes = working_set.get_span_contents(name_span).to_vec();
+    let bytes = working_set.get_span_contents(name_span);
 
     if bytes.contains(&b' ')
         || bytes.contains(&b'"')
@@ -3993,7 +4119,7 @@ pub fn parse_var_with_opt_type(
             )
         }
     } else {
-        let var_name = bytes;
+        let var_name = bytes.to_vec();
 
         if !is_variable(&var_name) {
             working_set.error(ParseError::Expected(
@@ -4291,7 +4417,7 @@ pub fn parse_signature(
     if (has_paren && bytes.ends_with(b")")) || (!has_paren && bytes.ends_with(b"]")) {
         end -= 1;
     } else {
-        working_set.error(ParseError::Unclosed("] or )".into(), Span::new(end, end)));
+        working_set.error(ParseError::Unclosed("] or )", Span::new(end, end)));
     }
 
     let sig = parse_signature_helper(working_set, Span::new(start, end), is_external);
@@ -4992,7 +5118,7 @@ pub fn parse_list_expression(
     if bytes.ends_with(b"]") {
         end -= 1;
     } else {
-        working_set.error(ParseError::Unclosed("]".into(), Span::new(end, end)));
+        working_set.error(ParseError::Unclosed("]", Span::new(end, end)));
     }
 
     let inner_span = Span::new(start, end);
@@ -5113,7 +5239,7 @@ fn parse_table_expression(
             span.end - 1
         } else {
             let end = span.end;
-            working_set.error(ParseError::Unclosed("]".into(), Span::new(end, end)));
+            working_set.error(ParseError::Unclosed("]", Span::new(end, end)));
             span.end
         };
 
@@ -5242,7 +5368,7 @@ fn table_type(head: &[Expression], rows: &[Vec<Expression>]) -> (Type, Vec<Parse
         span,
     };
 
-    let ty: Box<[(String, Type)]> = head
+    let ty = head
         .iter()
         .zip(column_types)
         .filter_map(|(expr, col_ty)| {
@@ -5276,7 +5402,7 @@ pub fn parse_block_expression(working_set: &mut StateWorkingSet, span: Span) -> 
     if bytes.ends_with(b"}") {
         end -= 1;
     } else {
-        working_set.error(ParseError::Unclosed("}".into(), Span::new(end, end)));
+        working_set.error(ParseError::Unclosed("}", Span::new(end, end)));
         is_closed = false;
     }
 
@@ -5336,7 +5462,7 @@ pub fn parse_match_block_expression(working_set: &mut StateWorkingSet, span: Spa
     if bytes.ends_with(b"}") {
         end -= 1;
     } else {
-        working_set.error(ParseError::Unclosed("}".into(), Span::new(end, end)));
+        working_set.error(ParseError::Unclosed("}", Span::new(end, end)));
         is_closed = false;
     }
 
@@ -5541,7 +5667,7 @@ pub fn parse_closure_expression(
     if bytes.ends_with(b"}") {
         end -= 1;
     } else {
-        working_set.error(ParseError::Unclosed("}".into(), Span::new(end, end)));
+        working_set.error(ParseError::Unclosed("}", Span::new(end, end)));
         is_closed = false;
     }
 
@@ -5583,7 +5709,7 @@ pub fn parse_closure_expression(
             let end_point = if let Some(span) = end_span {
                 span.end
             } else {
-                working_set.error(ParseError::Unclosed("|".into(), Span::new(end, end)));
+                working_set.error(ParseError::Unclosed("|", Span::new(end, end)));
                 end
             };
 
@@ -5674,8 +5800,12 @@ pub fn parse_value(
         return garbage(working_set, span);
     }
 
+    if let SyntaxShape::OneOf(possible_shapes) = shape {
+        return parse_oneof(working_set, &[span], &mut 0, possible_shapes, false);
+    }
+
     match bytes[0] {
-        b'$' => return parse_dollar_expr(working_set, span),
+        b'$' => return parse_dollar_expr(working_set, span, shape),
         b'(' => return parse_paren_expr(working_set, span, shape),
         b'{' => return parse_brace_expr(working_set, span, shape),
         b'[' => match shape {
@@ -5688,15 +5818,7 @@ pub fn parse_value(
             | SyntaxShape::String
             | SyntaxShape::GlobPattern
             | SyntaxShape::ExternalArgument => {}
-            SyntaxShape::OneOf(possible_shapes) => {
-                if !possible_shapes
-                    .iter()
-                    .any(|s| matches!(s, SyntaxShape::List(_)))
-                {
-                    working_set.error(ParseError::ExpectedWithStringMsg(shape.to_string(), span));
-                    return Expression::garbage(working_set, span);
-                }
-            }
+
             _ => {
                 working_set.error(ParseError::ExpectedWithStringMsg(shape.to_string(), span));
                 return Expression::garbage(working_set, span);
@@ -5766,9 +5888,6 @@ pub fn parse_value(
         }
 
         SyntaxShape::ExternalArgument => parse_regular_external_arg(working_set, span),
-        SyntaxShape::OneOf(possible_shapes) => {
-            parse_oneof(working_set, &[span], &mut 0, possible_shapes, false)
-        }
 
         SyntaxShape::Any => {
             if bytes.starts_with(b"[") {
@@ -6336,7 +6455,7 @@ pub fn parse_expression(working_set: &mut StateWorkingSet, spans: &[Span]) -> Ex
         let rhs = if spans[pos].start + point < spans[pos].end {
             let rhs_span = Span::new(spans[pos].start + point, spans[pos].end);
             if split[1].starts_with(b"$") {
-                parse_dollar_expr(working_set, rhs_span)
+                parse_dollar_expr(working_set, rhs_span, &SyntaxShape::Any)
             } else {
                 parse_string_strict(working_set, rhs_span)
             }
@@ -6420,6 +6539,7 @@ pub fn parse_expression(working_set: &mut StateWorkingSet, spans: &[Span]) -> Ex
                 }
             }
             b"where" => parse_where_expr(working_set, &spans[pos..]),
+            b"run" => parse_run_expr(working_set, &spans[pos..]),
             #[cfg(feature = "plugin")]
             b"plugin" => {
                 if spans.len() > 1 && working_set.get_span_contents(spans[1]) == b"use" {
@@ -6567,6 +6687,7 @@ pub fn parse_builtin_commands(
             parse_keyword(working_set, lite_command)
         }
         b"source" | b"source-env" => parse_source(working_set, lite_command),
+        b"run" => parse_run(working_set, lite_command),
         b"hide" => parse_hide(working_set, lite_command),
         b"where" => parse_where(working_set, lite_command),
         // Only "plugin use" is a keyword
@@ -6704,8 +6825,8 @@ pub fn parse_record(working_set: &mut StateWorkingSet, span: Span) -> Expression
     };
     while !lex_state.input.is_empty() {
         if let Some(ParseError::Unbalanced(left, right, _)) = lex_state.error.as_ref()
-            && left == "{"
-            && right == "}"
+            && *left == "{"
+            && *right == "}"
         {
             extra_tokens = true;
             unclosed = false;
@@ -6740,7 +6861,7 @@ pub fn parse_record(working_set: &mut StateWorkingSet, span: Span) -> Expression
     let (tokens, err) = (lex_state.output, lex_state.error);
 
     if unclosed {
-        working_set.error(ParseError::Unclosed("}".into(), Span::new(end, end)));
+        working_set.error(ParseError::Unclosed("}", Span::new(end, end)));
     } else if extra_tokens {
         working_set.error(ParseError::ExtraTokensAfterClosingDelimiter(Span::new(
             lex_state.span_offset,
@@ -6767,14 +6888,14 @@ pub fn parse_record(working_set: &mut StateWorkingSet, span: Span) -> Expression
             let inner = parse_value(
                 working_set,
                 Span::new(curr_span.start + 3, curr_span.end),
-                &SyntaxShape::Record(vec![]),
+                &SyntaxShape::record(),
             );
             idx += 1;
 
             match &inner.ty {
                 Type::Record(inner_fields) => {
                     if let Some(fields) = &mut field_types {
-                        for (field, ty) in inner_fields.as_ref() {
+                        for (field, ty) in inner_fields.fields.as_ref() {
                             fields.push((field.clone(), ty.clone()));
                         }
                     }
@@ -6979,7 +7100,7 @@ pub fn parse_pipeline(working_set: &mut StateWorkingSet, pipeline: &LitePipeline
                 let element = parse_pipeline_element(working_set, element);
                 // Handle $in for pipeline elements beyond the first one
                 if index > 0 && element.has_in_variable(working_set) {
-                    wrap_element_with_collect(working_set, element.clone())
+                    wrap_element_with_collect(working_set, element)
                 } else {
                     element
                 }
@@ -7549,7 +7670,7 @@ fn wrap_element_with_collect(
     }
 }
 
-fn wrap_expr_with_collect(working_set: &mut StateWorkingSet, expr: Expression) -> Expression {
+fn wrap_expr_with_collect(working_set: &mut StateWorkingSet, mut expr: Expression) -> Expression {
     let span = expr.span;
 
     // IN_VARIABLE_ID should get replaced with a unique variable, so that we don't have to
@@ -7560,7 +7681,6 @@ fn wrap_expr_with_collect(working_set: &mut StateWorkingSet, expr: Expression) -
         Type::Any,
         false,
     );
-    let mut expr = expr.clone();
     expr.replace_in_variable(working_set, var_id);
 
     // Bind the custom `$in` variable for that particular expression
