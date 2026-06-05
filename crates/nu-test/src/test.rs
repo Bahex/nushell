@@ -11,8 +11,9 @@ use kitest::{
     panic::PanicExpectation,
     test::{Test, TestFn, TestFnHandle, TestMeta, TestResult},
 };
+use nu_heavy_utils::merge::{ListMerge, Merge, MergeStrategy};
 use nu_protocol::{
-    BlockId, PipelineData, ShellError, Value,
+    BlockId, IntoPipelineData, PipelineData, ShellError, Span, Value,
     ast::Block,
     debugger::WithoutDebug,
     engine::{EngineState, Stack},
@@ -165,15 +166,41 @@ impl TestFn for NushellTestFn {
             return TestResult(Err(Whatever::from(errors)));
         }
 
+        let mut test_ctx: Option<Value> = None;
+
         for block_id in self.before_each_block_ids.iter().copied() {
             let block = self.engine_state.get_block(block_id);
-            if let Err(err) = nu_engine::eval_block::<WithoutDebug>(
+
+            let result = nu_engine::eval_block::<WithoutDebug>(
                 &self.engine_state,
                 &mut stack,
                 block,
                 PipelineData::empty(),
-            ) {
-                errors.before_each_errors.push(err);
+            )
+            .and_then(|pd| pd.body.into_value(block.span.unwrap_or(Span::test_data())));
+
+            match result {
+                Ok(out) => match test_ctx {
+                    Some(val) => {
+                        let span = out.span();
+                        // Necessary to clone, we may need to place the original value back into
+                        // test_ctx on error.
+                        let merge_result =
+                            val.clone()
+                                .merge(out, MergeStrategy::Deep(ListMerge::Append), span);
+                        match merge_result {
+                            Ok(merged) => test_ctx = Some(merged),
+                            Err(err) => {
+                                test_ctx = Some(val);
+                                errors.before_each_errors.push(err);
+                            }
+                        }
+                    }
+                    None => test_ctx = Some(out),
+                },
+                Err(err) => {
+                    errors.before_each_errors.push(err);
+                }
             }
         }
 
@@ -183,7 +210,10 @@ impl TestFn for NushellTestFn {
                 &self.engine_state,
                 &mut stack,
                 test_block,
-                PipelineData::empty(),
+                test_ctx
+                    .clone()
+                    .map(|val| val.into_pipeline_data())
+                    .unwrap_or(PipelineData::Empty),
             ) {
                 errors.test_error = Some(err);
             }
@@ -195,7 +225,10 @@ impl TestFn for NushellTestFn {
                 &self.engine_state,
                 &mut stack,
                 block,
-                PipelineData::empty(),
+                test_ctx
+                    .clone()
+                    .map(|val| val.into_pipeline_data())
+                    .unwrap_or(PipelineData::Empty),
             ) {
                 errors.after_each_errors.push(err);
             }

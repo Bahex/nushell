@@ -5022,6 +5022,7 @@ dependencies = [
  "nu-engine",
  "nu-experimental",
  "nu-glob",
+ "nu-heavy-utils",
  "nu-parser",
  "nu-path",
  "nu-protocol",

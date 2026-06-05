@@ -8,10 +8,7 @@ use std::{
 
 use itertools::Itertools;
 use kitest::runner::DefaultRunner;
-use nu_protocol::{
-    Config, IntoValue, Span, Value,
-    engine::{EngineState, StateWorkingSet},
-};
+use nu_protocol::{Config, IntoValue, Span, Value, engine::EngineState};
 
 use crate::group::{ModuleRunner, TestModules};
 
@@ -81,7 +78,7 @@ pub fn run_test_harness(
     initial_engine_state: &EngineState,
     test_path: impl AsRef<Path>,
     cwd: impl AsRef<Path>,
-    args: Args,
+    _args: Args,
 ) -> miette::Result<()> {
     let cwd = cwd.as_ref().canonicalize().unwrap();
     let test_path = cwd.join(test_path).canonicalize().unwrap();

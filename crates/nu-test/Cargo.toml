@@ -22,6 +22,7 @@ nu-path.workspace = true
 nu-protocol.workspace = true
 nu-std.workspace = true
 nu-utils.workspace = true
+nu-heavy-utils.workspace = true
 
 derive_more = { workspace = true, features = ["display"]}
 itertools = { workspace = true }
@@ -30,3 +31,10 @@ miette = { workspace = true }
 pathdiff = { workspace = true }
 thiserror = { workspace = true }
 walkdir = { workspace = true }
+
+[lints]
+## still prototyping
+# workspace = true
+
+[lints.clippy]
+result_large_err = "allow"
