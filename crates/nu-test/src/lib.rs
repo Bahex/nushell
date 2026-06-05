@@ -25,10 +25,6 @@ pub fn engine_state() -> EngineState {
     let engine_state = nu_cmd_extra::add_extra_command_context(engine_state);
     let mut engine_state = nu_cli::add_cli_context(engine_state);
 
-    let mut working_set = StateWorkingSet::new(&engine_state);
-    working_set.add_decl(Box::new(nu_cli::Print));
-    engine_state.merge_delta(working_set.delta).unwrap();
-
     engine_state.generate_nu_constant();
     [
         (

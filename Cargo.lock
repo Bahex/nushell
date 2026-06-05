@@ -5009,7 +5009,7 @@ dependencies = [
 
 [[package]]
 name = "nu-test"
-version = "0.112.3"
+version = "0.113.2"
 dependencies = [
  "derive_more 2.1.1",
  "itertools 0.14.0",
