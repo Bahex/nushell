@@ -4,6 +4,7 @@ mod filesize;
 mod from_value;
 mod glob;
 mod into_value;
+mod macros;
 mod range;
 #[cfg(test)]
 mod test_derive;
