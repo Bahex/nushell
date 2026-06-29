@@ -4,11 +4,12 @@ mod filesize;
 mod from_value;
 mod glob;
 mod into_value;
-mod macros;
 mod range;
 #[cfg(test)]
 mod test_derive;
 
+#[doc(hidden)]
+pub mod macros;
 pub mod record;
 use bstr::BStr;
 pub use custom_value::CustomValue;
