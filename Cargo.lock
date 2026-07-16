@@ -4724,6 +4724,7 @@ dependencies = [
  "nu-engine",
  "nu-path",
  "nu-plugin-engine",
+ "nu-plugin-protocol",
  "nu-protocol",
 ]
 
